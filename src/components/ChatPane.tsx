@@ -1,8 +1,17 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Copy, ThumbsUp, ThumbsDown, Share2, RotateCcw, Edit3, Trash2, Send } from 'lucide-react';
+import {
+  Copy,
+  ThumbsUp,
+  ThumbsDown,
+  Share2,
+  RotateCcw,
+  Edit3,
+  Trash2,
+  Send,
+} from 'lucide-react';
 import { getActivePath } from '@/lib/tree-algorithms';
 import { NodeT } from '@/lib/types';
 import { Tooltip } from './Tooltip';
@@ -28,23 +37,29 @@ export function ChatPane({
   onRequestAIReply,
   onDeleteNode,
   onEditNode,
-  className
+  className,
 }: ChatPaneProps) {
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [buttonLoading, setButtonLoading] = useState<string | null>(null);
-  const [branchingFromNode, setBranchingFromNode] = useState<string | null>(null);
-  const [inputText, setInputText] = useState('');
+  const [branchingFromNode, setBranchingFromNode] = useState<string | null>(
+    null
+  );
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
-  const [deleteConfirm, setDeleteConfirm] = useState<{ nodeId: string; nodeText: string } | null>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    nodeId: string;
+    nodeText: string;
+  } | null>(null);
   const toast = useToast();
 
-  const nodesById = nodes.reduce((acc, node) => {
-    acc[node.id] = node;
-    return acc;
-  }, {} as Record<string, NodeT>);
+  const nodesById = nodes.reduce(
+    (acc, node) => {
+      acc[node.id] = node;
+      return acc;
+    },
+    {} as Record<string, NodeT>
+  );
 
   const activePath = activeNodeId ? getActivePath(activeNodeId, nodesById) : [];
 
@@ -65,11 +80,6 @@ export function ChatPane({
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleBranch = (nodeId: string) => {
-    setBranchingFromNode(nodeId);
-    setMessage('');
   };
 
   const handleCopy = async (text: string, buttonId: string) => {
@@ -96,14 +106,14 @@ export function ChatPane({
     }
   };
 
-  const handleEdit = (nodeId: string, text: string, buttonId: string) => {
+  const handleEdit = (nodeId: string, text: string) => {
     setEditingNodeId(nodeId);
     setEditText(text);
   };
 
   const handleSaveEdit = async () => {
     if (!editingNodeId || !onEditNode) return;
-    
+
     try {
       await onEditNode(editingNodeId, editText);
       setEditingNodeId(null);
@@ -126,7 +136,7 @@ export function ChatPane({
 
   const confirmDelete = async () => {
     if (!deleteConfirm || !onDeleteNode) return;
-    
+
     try {
       await onDeleteNode(deleteConfirm.nodeId);
       toast.success('Message deleted');
@@ -135,17 +145,6 @@ export function ChatPane({
       toast.error('Failed to delete message');
     } finally {
       setDeleteConfirm(null);
-    }
-  };
-
-  const handleAIReply = async (nodeId: string) => {
-    setIsLoading(true);
-    try {
-      await onRequestAIReply(nodeId);
-    } catch (error) {
-      console.error('Error requesting AI reply:', error);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -175,7 +174,7 @@ export function ChatPane({
                     <div className="space-y-2">
                       <textarea
                         value={editText}
-                        onChange={(e) => setEditText(e.target.value)}
+                        onChange={e => setEditText(e.target.value)}
                         className="w-full p-2 border rounded resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
                         rows={3}
                         autoFocus
@@ -195,20 +194,30 @@ export function ChatPane({
                         </button>
                       </div>
                     </div>
-                  ) : (node as any).isGenerating || node.text === 'Generating...' ? (
+                  ) : (node as NodeT & { isGenerating?: boolean })
+                      .isGenerating || node.text === 'Generating...' ? (
                     <div className="flex items-center space-x-2">
                       <div className="animate-pulse">Generating</div>
                       <div className="flex space-x-1">
-                        <div className="w-1 h-1 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                        <div className="w-1 h-1 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                        <div className="w-1 h-1 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                        <div
+                          className="w-1 h-1 bg-gray-400 rounded-full animate-bounce"
+                          style={{ animationDelay: '0ms' }}
+                        ></div>
+                        <div
+                          className="w-1 h-1 bg-gray-400 rounded-full animate-bounce"
+                          style={{ animationDelay: '150ms' }}
+                        ></div>
+                        <div
+                          className="w-1 h-1 bg-gray-400 rounded-full animate-bounce"
+                          style={{ animationDelay: '300ms' }}
+                        ></div>
                       </div>
                     </div>
                   ) : (
                     node.text
                   )}
                 </div>
-                
+
                 {/* Action buttons for messages */}
                 <div className="absolute -bottom-8 left-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50">
                   <div className="flex space-x-1 bg-white rounded-lg shadow-lg border p-1">
@@ -216,7 +225,9 @@ export function ChatPane({
                       <>
                         <Tooltip content="Copy">
                           <button
-                            onClick={() => handleCopy(node.text, `copy-${node.id}`)}
+                            onClick={() =>
+                              handleCopy(node.text, `copy-${node.id}`)
+                            }
                             className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-50"
                             disabled={buttonLoading === `copy-${node.id}`}
                           >
@@ -225,7 +236,9 @@ export function ChatPane({
                         </Tooltip>
                         <Tooltip content="Good response">
                           <button
-                            onClick={() => {/* TODO: thumbs up */}}
+                            onClick={() => {
+                              /* TODO: thumbs up */
+                            }}
                             className="p-1.5 rounded hover:bg-gray-100"
                           >
                             <ThumbsUp className="w-3.5 h-3.5 text-gray-600" />
@@ -233,7 +246,9 @@ export function ChatPane({
                         </Tooltip>
                         <Tooltip content="Bad response">
                           <button
-                            onClick={() => {/* TODO: thumbs down */}}
+                            onClick={() => {
+                              /* TODO: thumbs down */
+                            }}
                             className="p-1.5 rounded hover:bg-gray-100"
                           >
                             <ThumbsDown className="w-3.5 h-3.5 text-gray-600" />
@@ -241,7 +256,9 @@ export function ChatPane({
                         </Tooltip>
                         <Tooltip content="Share">
                           <button
-                            onClick={() => {/* TODO: share */}}
+                            onClick={() => {
+                              /* TODO: share */
+                            }}
                             className="p-1.5 rounded hover:bg-gray-100"
                           >
                             <Share2 className="w-3.5 h-3.5 text-gray-600" />
@@ -249,7 +266,12 @@ export function ChatPane({
                         </Tooltip>
                         <Tooltip content="Try again">
                           <button
-                            onClick={() => handleTryAgain(node.parentId!, `tryagain-${node.id}`)}
+                            onClick={() =>
+                              handleTryAgain(
+                                node.parentId!,
+                                `tryagain-${node.id}`
+                              )
+                            }
                             className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-50"
                             disabled={buttonLoading === `tryagain-${node.id}`}
                           >
@@ -261,7 +283,9 @@ export function ChatPane({
                       <>
                         <Tooltip content="Copy">
                           <button
-                            onClick={() => handleCopy(node.text, `copy-${node.id}`)}
+                            onClick={() =>
+                              handleCopy(node.text, `copy-${node.id}`)
+                            }
                             className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-50"
                             disabled={buttonLoading === `copy-${node.id}`}
                           >
@@ -270,7 +294,7 @@ export function ChatPane({
                         </Tooltip>
                         <Tooltip content="Edit message">
                           <button
-                            onClick={() => handleEdit(node.id, node.text, `edit-${node.id}`)}
+                            onClick={() => handleEdit(node.id, node.text)}
                             className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-50"
                             disabled={buttonLoading === `edit-${node.id}`}
                           >
@@ -305,9 +329,18 @@ export function ChatPane({
             <div className="max-w-[80%] p-3 rounded-lg bg-gray-100 text-gray-900 relative">
               <div className="flex items-center space-x-3">
                 <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                  <div
+                    className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
+                    style={{ animationDelay: '0ms' }}
+                  ></div>
+                  <div
+                    className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
+                    style={{ animationDelay: '150ms' }}
+                  ></div>
+                  <div
+                    className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
+                    style={{ animationDelay: '300ms' }}
+                  ></div>
                 </div>
                 <span className="text-sm text-gray-600">AI is thinking...</span>
               </div>
@@ -315,10 +348,10 @@ export function ChatPane({
           </motion.div>
         )}
       </div>
-      
+
       {/* Toast Container */}
       <ToastContainer toasts={toast.toasts} onRemove={toast.removeToast} />
-      
+
       {/* Delete Confirmation Dialog */}
       {deleteConfirm && (
         <ConfirmDialog
@@ -331,15 +364,17 @@ export function ChatPane({
           variant="danger"
         />
       )}
-      
+
       {/* Input area */}
       <div className="border-t p-4">
         {branchingFromNode && (
           <div className="mb-2 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
             <div className="flex items-center justify-between">
               <div>
-                <span className="font-medium">Branching from:</span> 
-                <span className="ml-1">{nodesById[branchingFromNode]?.text.slice(0, 50)}...</span>
+                <span className="font-medium">Branching from:</span>
+                <span className="ml-1">
+                  {nodesById[branchingFromNode]?.text.slice(0, 50)}...
+                </span>
               </div>
               <button
                 onClick={() => setBranchingFromNode(null)}
@@ -350,17 +385,17 @@ export function ChatPane({
             </div>
           </div>
         )}
-        
+
         <div className="flex space-x-2">
           <input
             type="text"
             value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+            onChange={e => setMessage(e.target.value)}
+            onKeyPress={e => e.key === 'Enter' && handleSendMessage()}
             placeholder={
-              branchingFromNode 
-                ? "Enter your branch message..." 
-                : "Type your message..."
+              branchingFromNode
+                ? 'Enter your branch message...'
+                : 'Type your message...'
             }
             className="flex-1 p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             disabled={isLoading}

@@ -19,24 +19,24 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   cancelText = 'Cancel',
   onConfirm,
   onCancel,
-  variant = 'danger'
+  variant = 'danger',
 }) => {
   const getColors = () => {
     switch (variant) {
       case 'danger':
         return {
           button: 'bg-red-600 hover:bg-red-700 focus:ring-red-500',
-          icon: 'text-red-600'
+          icon: 'text-red-600',
         };
       case 'warning':
         return {
           button: 'bg-yellow-600 hover:bg-yellow-700 focus:ring-yellow-500',
-          icon: 'text-yellow-600'
+          icon: 'text-yellow-600',
         };
       default:
         return {
           button: 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500',
-          icon: 'text-blue-600'
+          icon: 'text-blue-600',
         };
     }
   };
@@ -54,7 +54,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
         className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
         onClick={onCancel}
       />
-      
+
       {/* Dialog */}
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <motion.div
@@ -67,11 +67,15 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           <div className="p-6">
             <div className="flex items-start">
               <div className="flex-shrink-0">
-                <div className={`p-2 rounded-full ${
-                  variant === 'danger' ? 'bg-red-100 dark:bg-red-900/20' :
-                  variant === 'warning' ? 'bg-yellow-100 dark:bg-yellow-900/20' :
-                  'bg-blue-100 dark:bg-blue-900/20'
-                }`}>
+                <div
+                  className={`p-2 rounded-full ${
+                    variant === 'danger'
+                      ? 'bg-red-100 dark:bg-red-900/20'
+                      : variant === 'warning'
+                        ? 'bg-yellow-100 dark:bg-yellow-900/20'
+                        : 'bg-blue-100 dark:bg-blue-900/20'
+                  }`}
+                >
                   <AlertTriangle className={`h-5 w-5 ${colors.icon}`} />
                 </div>
               </div>
@@ -95,7 +99,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
               </div>
             </div>
           </div>
-          
+
           <div className="bg-gray-50 dark:bg-gray-700/50 px-6 py-4 flex justify-end space-x-3 rounded-b-xl border-t border-gray-200 dark:border-gray-600">
             <button
               type="button"

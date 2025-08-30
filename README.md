@@ -25,29 +25,33 @@ GPTree is a web application that enables branching conversations in a tree struc
 
 ### Prerequisites
 
-- Node.js 18+ 
+- Node.js 18+
 - PostgreSQL database (or Vercel Postgres)
 - OpenAI API key
 
 ### Installation
 
 1. Clone the repository:
+
 ```bash
 git clone <repository-url>
 cd gptree
 ```
 
 2. Install dependencies:
+
 ```bash
 npm install
 ```
 
 3. Set up environment variables:
+
 ```bash
 cp env.example .env.local
 ```
 
 Edit `.env.local` with your values:
+
 ```env
 DATABASE_URL="your-postgres-connection-string"
 SESSION_SECRET="your-long-random-session-secret"
@@ -55,12 +59,14 @@ OPENAI_API_KEY="your-openai-api-key"
 ```
 
 4. Set up the database:
+
 ```bash
 npx prisma generate
 npx prisma db push
 ```
 
 5. Run the development server:
+
 ```bash
 npm run dev
 ```

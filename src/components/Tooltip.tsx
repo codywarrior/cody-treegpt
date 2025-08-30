@@ -13,10 +13,14 @@ export const Tooltip: React.FC<TooltipProps> = ({
   content,
   position = 'auto',
   className = '',
-  delay = 500
+  delay = 500,
 }) => {
   const [isVisible, setIsVisible] = useState(false);
-  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0, placement: 'top' });
+  const [tooltipPosition, setTooltipPosition] = useState({
+    x: 0,
+    y: 0,
+    placement: 'top',
+  });
   const triggerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const timeoutRef = useRef<NodeJS.Timeout>();
@@ -28,7 +32,7 @@ export const Tooltip: React.FC<TooltipProps> = ({
     const tooltipRect = tooltipRef.current.getBoundingClientRect();
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
-    
+
     const spacing = 8;
     let x = 0;
     let y = 0;
@@ -75,8 +79,14 @@ export const Tooltip: React.FC<TooltipProps> = ({
     }
 
     // Ensure tooltip stays within viewport bounds
-    x = Math.max(spacing, Math.min(x, viewportWidth - tooltipRect.width - spacing));
-    y = Math.max(spacing, Math.min(y, viewportHeight - tooltipRect.height - spacing));
+    x = Math.max(
+      spacing,
+      Math.min(x, viewportWidth - tooltipRect.width - spacing)
+    );
+    y = Math.max(
+      spacing,
+      Math.min(y, viewportHeight - tooltipRect.height - spacing)
+    );
 
     setTooltipPosition({ x, y, placement });
   };
@@ -115,7 +125,7 @@ export const Tooltip: React.FC<TooltipProps> = ({
       >
         {children}
       </div>
-      
+
       {isVisible && (
         <div
           ref={tooltipRef}
@@ -129,10 +139,13 @@ export const Tooltip: React.FC<TooltipProps> = ({
           {/* Arrow indicator */}
           <div
             className={`absolute w-2 h-2 bg-gray-900 transform rotate-45 ${
-              tooltipPosition.placement === 'top' ? 'bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2' :
-              tooltipPosition.placement === 'bottom' ? 'top-0 left-1/2 -translate-x-1/2 -translate-y-1/2' :
-              tooltipPosition.placement === 'left' ? 'right-0 top-1/2 -translate-y-1/2 translate-x-1/2' :
-              'left-0 top-1/2 -translate-y-1/2 -translate-x-1/2'
+              tooltipPosition.placement === 'top'
+                ? 'bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2'
+                : tooltipPosition.placement === 'bottom'
+                  ? 'top-0 left-1/2 -translate-x-1/2 -translate-y-1/2'
+                  : tooltipPosition.placement === 'left'
+                    ? 'right-0 top-1/2 -translate-y-1/2 translate-x-1/2'
+                    : 'left-0 top-1/2 -translate-y-1/2 -translate-x-1/2'
             }`}
           />
         </div>

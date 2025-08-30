@@ -36,10 +36,7 @@ export async function POST(request: NextRequest) {
     const { title } = await request.json();
 
     if (!title) {
-      return NextResponse.json(
-        { error: 'Title is required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Title is required' }, { status: 400 });
     }
 
     const conversation = await prisma.conversation.create({

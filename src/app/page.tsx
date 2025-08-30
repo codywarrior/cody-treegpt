@@ -4,10 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, MessageSquare, Edit2, Trash2 } from 'lucide-react';
 import { Tooltip } from '@/components/Tooltip';
-import { useToast, ToastContainer } from '@/components/Toast';
+import { useToast } from '@/components/Toast';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import Link from 'next/link';
-import { Calendar, MoreHorizontal } from 'lucide-react';
 
 import { ConversationT, UserT } from '@/lib/types';
 
@@ -19,7 +18,10 @@ export default function Home() {
   const [newTitle, setNewTitle] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
-  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; title: string } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
   const toast = useToast();
   const router = useRouter();
 
@@ -61,15 +63,15 @@ export default function Home() {
 
   const createConversation = async () => {
     if (!newTitle.trim()) return;
-    
+
     setIsCreating(true);
     try {
       const response = await fetch('/api/conversations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: newTitle.trim() })
+        body: JSON.stringify({ title: newTitle.trim() }),
       });
-      
+
       if (response.ok) {
         const { conversation } = await response.json();
         setNewTitle('');
@@ -105,14 +107,14 @@ export default function Home() {
       const response = await fetch(`/api/conversations/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title })
+        body: JSON.stringify({ title }),
       });
-      
+
       if (response.ok) {
         toast.success('Conversation updated');
         // Update local state immediately for better UX
-        setConversations(prev => 
-          prev.map(c => c.id === editingId ? { ...c, title: editTitle } : c)
+        setConversations(prev =>
+          prev.map(c => (c.id === editingId ? { ...c, title: editTitle } : c))
         );
         setEditingId(null);
         setEditTitle('');
@@ -137,12 +139,12 @@ export default function Home() {
 
   const confirmDelete = async () => {
     if (!deleteConfirm) return;
-    
+
     try {
       const response = await fetch(`/api/conversations/${deleteConfirm.id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
       });
-      
+
       if (response.ok) {
         toast.success('Conversation deleted');
         loadConversations();
@@ -203,8 +205,8 @@ export default function Home() {
             <input
               type="text"
               value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && createConversation()}
+              onChange={e => setNewTitle(e.target.value)}
+              onKeyPress={e => e.key === 'Enter' && createConversation()}
               placeholder="Enter conversation title..."
               className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
@@ -226,16 +228,22 @@ export default function Home() {
               Your Conversations
             </h2>
           </div>
-          
+
           {conversations.length === 0 ? (
             <div className="p-8 text-center text-gray-500">
               <MessageSquare className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-              <p>No conversations yet. Create your first conversation to get started!</p>
+              <p>
+                No conversations yet. Create your first conversation to get
+                started!
+              </p>
             </div>
           ) : (
             <div className="divide-y divide-gray-200">
-              {conversations.map((conversation) => (
-                <div key={conversation.id} className="p-6 hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-b-0">
+              {conversations.map(conversation => (
+                <div
+                  key={conversation.id}
+                  className="p-6 hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-b-0"
+                >
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       {editingId === conversation.id ? (
@@ -243,8 +251,10 @@ export default function Home() {
                           <input
                             type="text"
                             value={editTitle}
-                            onChange={(e) => setEditTitle(e.target.value)}
-                            onKeyPress={(e) => e.key === 'Enter' && saveEditConversation()}
+                            onChange={e => setEditTitle(e.target.value)}
+                            onKeyPress={e =>
+                              e.key === 'Enter' && saveEditConversation()
+                            }
                             className="flex-1 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                             autoFocus
                           />
@@ -270,12 +280,19 @@ export default function Home() {
                       )}
                       <div className="flex items-center text-sm text-gray-500 space-x-4">
                         <div className="flex items-center">
-                          <Calendar className="w-4 h-4 mr-1" />
-                          {new Date(conversation.createdAt).toLocaleDateString()}
+                          <MessageSquare className="w-4 h-4 mr-2" />
+                          {new Date(
+                            conversation.createdAt
+                          ).toLocaleDateString()}
                         </div>
                         <div className="flex items-center">
                           <MessageSquare className="w-4 h-4 mr-1" />
-                          {(conversation as ConversationT & { _count?: { nodes: number } })._count?.nodes || 0} messages
+                          {(
+                            conversation as ConversationT & {
+                              _count?: { nodes: number };
+                            }
+                          )._count?.nodes || 0}{' '}
+                          messages
                         </div>
                       </div>
                     </div>
@@ -290,15 +307,31 @@ export default function Home() {
                       </Tooltip>
                       <Tooltip content="Delete conversation">
                         <button
-                          onClick={() => deleteConversation(conversation.id, conversation.title)}
+                          onClick={() =>
+                            deleteConversation(
+                              conversation.id,
+                              conversation.title
+                            )
+                          }
                           className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </Tooltip>
-                      <Link href={`/c/${conversation.id}`} className="p-2 text-gray-400 hover:text-gray-600">
-                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                      <Link
+                        href={`/c/${conversation.id}`}
+                        className="p-2 text-gray-400 hover:text-gray-600"
+                      >
+                        <svg
+                          className="w-5 h-5"
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
+                            clipRule="evenodd"
+                          />
                         </svg>
                       </Link>
                     </div>
@@ -310,7 +343,7 @@ export default function Home() {
         </div>
       </main>
       <toast.ToastContainer />
-      
+
       {deleteConfirm && (
         <ConfirmDialog
           title="Delete Conversation"

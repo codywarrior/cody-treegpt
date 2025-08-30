@@ -7,7 +7,7 @@ export async function GET(
   { params }: { params: Promise<{ cid: string }> }
 ) {
   const { cid } = await params;
-  
+
   try {
     const session = await getSession();
     if (!session?.user) {
@@ -27,10 +27,14 @@ export async function GET(
     });
 
     if (!conversation) {
-      return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
+      return NextResponse.json(
+        { error: 'Conversation not found' },
+        { status: 404 }
+      );
     }
 
     // Find root node
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const rootNode = conversation.nodes.find((node: any) => !node.parentId);
 
     return NextResponse.json({
@@ -40,6 +44,7 @@ export async function GET(
         isPublic: conversation.isPublic,
         createdAt: conversation.createdAt.toISOString(),
       },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       nodes: conversation.nodes.map((node: any) => ({
         id: node.id,
         conversationId: node.conversationId,
@@ -65,7 +70,7 @@ export async function PATCH(
   { params }: { params: Promise<{ cid: string }> }
 ) {
   const { cid } = await params;
-  
+
   try {
     const session = await getSession();
     if (!session?.user) {
@@ -73,7 +78,7 @@ export async function PATCH(
     }
 
     const { title } = await request.json();
-    
+
     if (!title || typeof title !== 'string') {
       return NextResponse.json({ error: 'Title is required' }, { status: 400 });
     }
@@ -87,13 +92,19 @@ export async function PATCH(
     });
 
     if (conversation.count === 0) {
-      return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
+      return NextResponse.json(
+        { error: 'Conversation not found' },
+        { status: 404 }
+      );
     }
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error updating conversation:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 }
 
@@ -102,7 +113,7 @@ export async function DELETE(
   { params }: { params: Promise<{ cid: string }> }
 ) {
   const { cid } = await params;
-  
+
   try {
     const session = await getSession();
     if (!session?.user) {
@@ -125,12 +136,18 @@ export async function DELETE(
     });
 
     if (conversation.count === 0) {
-      return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
+      return NextResponse.json(
+        { error: 'Conversation not found' },
+        { status: 404 }
+      );
     }
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting conversation:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 }

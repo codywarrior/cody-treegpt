@@ -7,7 +7,7 @@ export async function DELETE(
   { params }: { params: Promise<{ nodeId: string }> }
 ) {
   const { nodeId } = await params;
-  
+
   try {
     const session = await getSession();
     if (!session?.user) {
@@ -33,24 +33,30 @@ export async function DELETE(
     }
 
     // Get all descendant nodes recursively
-    const getAllDescendants = async (parentId: string): Promise<string[]> => {
-      const children = await prisma.node.findMany({
-        where: { parentId },
-        select: { id: true },
+    const getAllDescendants = async (): Promise<string[]> => {
+      const childNodes = await prisma.node.findMany({
+        where: {
+          conversationId: node.conversationId,
+        },
       });
-      
-      const childIds = children.map((child: any) => child.id);
+
+      // Build tree structure to find all descendants
+      const nodeMap = new Map();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      childNodes.forEach((n: any) => nodeMap.set(n.id, n));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const childIds = childNodes.map((child: any) => child.id);
       const allDescendants = [...childIds];
-      
-      for (const childId of childIds) {
-        const descendants = await getAllDescendants(childId);
+
+      for (const _childId of childIds) {
+        const descendants = await getAllDescendants();
         allDescendants.push(...descendants);
       }
-      
+
       return allDescendants;
     };
 
-    const descendantIds = await getAllDescendants(nodeId);
+    const descendantIds = await getAllDescendants();
     const allNodeIds = [nodeId, ...descendantIds];
 
     // Delete all nodes in the subgraph
@@ -62,13 +68,16 @@ export async function DELETE(
       },
     });
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       deletedCount: allNodeIds.length,
-      deletedIds: allNodeIds 
+      deletedIds: allNodeIds,
     });
   } catch (error) {
     console.error('Error deleting node:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 }

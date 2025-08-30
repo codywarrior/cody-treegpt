@@ -149,7 +149,7 @@ export async function destroySession(): Promise<void> {
  */
 export async function requireAuth(): Promise<UserT> {
   const session = await getSession();
-  
+
   if (!session) {
     redirect('/auth/signin');
   }

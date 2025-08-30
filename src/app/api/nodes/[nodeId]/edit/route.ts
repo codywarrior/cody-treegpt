@@ -24,9 +24,9 @@ export async function PUT(
       where: {
         id: nodeId,
         conversation: {
-          ownerId: user.id
-        }
-      }
+          ownerId: user.id,
+        },
+      },
     });
 
     if (!node) {
@@ -36,7 +36,7 @@ export async function PUT(
     // Update the node text
     const updatedNode = await prisma.node.update({
       where: { id: nodeId },
-      data: { text }
+      data: { text },
     });
 
     return NextResponse.json({ node: updatedNode });

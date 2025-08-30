@@ -40,7 +40,7 @@ export async function POST(
     // Build nodes map and get active path
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const nodesById: Record<string, any> = {};
-    allNodes.forEach((n) => {
+    allNodes.forEach(n => {
       nodesById[n.id] = n;
     });
 
@@ -50,7 +50,8 @@ export async function POST(
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
       {
         role: 'system',
-        content: 'You are a helpful AI assistant in a branching conversation tree. Provide thoughtful, contextual responses based on the conversation path.',
+        content:
+          'You are a helpful AI assistant in a branching conversation tree. Provide thoughtful, contextual responses based on the conversation path.',
       },
     ];
 
@@ -98,33 +99,51 @@ export async function POST(
     const stream = new ReadableStream({
       async start(controller) {
         // Send initial node data
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'node', node: aiNode })}\n\n`));
-        
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({ type: 'node', node: aiNode })}\n\n`
+          )
+        );
+
         let fullResponse = '';
-        
+
         try {
           for await (const chunk of completion) {
             const content = chunk.choices[0]?.delta?.content || '';
             if (content) {
               fullResponse += content;
               // Send streaming content
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'content', content })}\n\n`));
+              controller.enqueue(
+                encoder.encode(
+                  `data: ${JSON.stringify({ type: 'content', content })}\n\n`
+                )
+              );
             }
           }
 
           // Update the node with the complete response
           const updatedNode = await prisma.node.update({
             where: { id: aiNode.id },
-            data: { text: fullResponse || 'Sorry, I could not generate a response.' },
+            data: {
+              text: fullResponse || 'Sorry, I could not generate a response.',
+            },
           });
 
           // Send completion signal
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'complete', node: updatedNode })}\n\n`));
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({ type: 'complete', node: updatedNode })}\n\n`
+            )
+          );
         } catch (error) {
           console.error('Streaming error:', error);
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', error: 'Failed to generate response' })}\n\n`));
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({ type: 'error', error: 'Failed to generate response' })}\n\n`
+            )
+          );
         }
-        
+
         controller.close();
       },
     });
@@ -133,7 +152,7 @@ export async function POST(
       headers: {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
+        Connection: 'keep-alive',
       },
     });
   } catch (error) {

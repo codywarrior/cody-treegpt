@@ -59,9 +59,9 @@ export default function ConversationPage() {
       if (response.ok) {
         const data = await response.json();
         const newNode = data.node;
-        setNodes((prev) => [...prev, newNode]);
+        setNodes(prev => [...prev, newNode]);
         setActiveNodeId(newNode.id);
-        
+
         // Create placeholder assistant node immediately
         const placeholderNode = {
           id: `temp-${Date.now()}`,
@@ -71,12 +71,12 @@ export default function ConversationPage() {
           text: 'Generating...',
           deleted: false,
           createdAt: new Date().toISOString(),
-          isGenerating: true
+          isGenerating: true,
         };
-        
-        setNodes((prev) => [...prev, placeholderNode]);
+
+        setNodes(prev => [...prev, placeholderNode]);
         setActiveNodeId(placeholderNode.id);
-        
+
         // Request AI reply
         handleRequestAIReply(newNode.id, placeholderNode.id);
       }
@@ -101,7 +101,7 @@ export default function ConversationPage() {
       if (response.ok) {
         const data = await response.json();
         const newNode = data.node;
-        setNodes((prev) => [...prev, newNode]);
+        setNodes(prev => [...prev, newNode]);
         setActiveNodeId(newNode.id);
       }
     } catch (error) {
@@ -109,7 +109,10 @@ export default function ConversationPage() {
     }
   };
 
-  const handleRequestAIReply = async (nodeId: string, placeholderNodeId?: string) => {
+  const handleRequestAIReply = async (
+    nodeId: string,
+    placeholderNodeId?: string
+  ) => {
     try {
       // Don't set global loading - AI thinking will show in the node itself
       const response = await fetch(`/api/nodes/${nodeId}/ai-reply`, {
@@ -122,7 +125,7 @@ export default function ConversationPage() {
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
-      let aiNode: any = null;
+      let aiNode: NodeT | null = null;
       let streamingText = '';
 
       if (reader) {
@@ -137,39 +140,37 @@ export default function ConversationPage() {
             if (line.startsWith('data: ')) {
               try {
                 const data = JSON.parse(line.slice(6));
-                
+
                 if (data.type === 'node') {
                   // Replace placeholder with actual node
                   aiNode = data.node;
                   if (placeholderNodeId) {
-                    setNodes((prev) => prev.map(n => n.id === placeholderNodeId ? aiNode : n));
+                    setNodes(prev =>
+                      prev.map(n => (n.id === placeholderNodeId ? aiNode : n))
+                    );
                   } else {
-                    setNodes((prev) => [...prev, aiNode]);
+                    setNodes(prev => [...prev, aiNode]);
                   }
                   setActiveNodeId(aiNode.id);
                 } else if (data.type === 'content' && aiNode) {
                   // Streaming content
                   streamingText += data.content;
-                  setNodes((prev) => 
-                    prev.map(node => 
-                      node.id === aiNode.id 
+                  setNodes(prev =>
+                    prev.map(node =>
+                      node.id === aiNode.id
                         ? { ...node, text: streamingText }
                         : node
                     )
                   );
                 } else if (data.type === 'complete' && aiNode) {
                   // Final update
-                  setNodes((prev) => 
-                    prev.map(node => 
-                      node.id === aiNode.id 
-                        ? data.node
-                        : node
-                    )
+                  setNodes(prev =>
+                    prev.map(node => (node.id === aiNode.id ? data.node : node))
                   );
                 } else if (data.type === 'error') {
                   console.error('Streaming error:', data.error);
                 }
-              } catch (e) {
+              } catch {
                 // Ignore malformed JSON
               }
             }
@@ -185,7 +186,7 @@ export default function ConversationPage() {
     try {
       // Find the deleted node before deletion for active node logic
       const deletedNode = nodes.find(n => n.id === nodeId);
-      
+
       const response = await fetch(`/api/nodes/${nodeId}/delete`, {
         method: 'DELETE',
       });
@@ -194,21 +195,21 @@ export default function ConversationPage() {
         // Update local state immediately by filtering out the deleted node
         const updatedNodes = nodes.filter(n => n.id !== nodeId);
         setNodes(updatedNodes);
-        
+
         // Reset active node if the deleted node was active
         if (deletedNode && activeNodeId === nodeId) {
           // Find a suitable replacement node (parent or first available)
-          const parentNode = deletedNode.parentId ? 
-            updatedNodes.find(n => n.id === deletedNode.parentId) : 
-            updatedNodes.find(n => n.role === 'user');
-          
+          const parentNode = deletedNode.parentId
+            ? updatedNodes.find(n => n.id === deletedNode.parentId)
+            : updatedNodes.find(n => n.role === 'user');
+
           if (parentNode) {
             setActiveNodeId(parentNode.id);
           } else if (updatedNodes.length > 0) {
             setActiveNodeId(updatedNodes[0].id);
           }
         }
-        
+
         // Reload conversation in background to ensure consistency
         loadConversation();
       }
@@ -227,9 +228,9 @@ export default function ConversationPage() {
 
       if (response.ok) {
         // Update the local state immediately for better UX
-        setNodes(prevNodes => 
-          prevNodes.map(node => 
-            node.id === nodeId ? { ...node, text: newText } as NodeT : node
+        setNodes(prevNodes =>
+          prevNodes.map(node =>
+            node.id === nodeId ? ({ ...node, text: newText } as NodeT) : node
           )
         );
       } else {
@@ -300,17 +301,23 @@ export default function ConversationPage() {
                   {(() => {
                     const activePath = [];
                     let currentId = activeNodeId;
-                    const nodesById = nodes.reduce((acc: any, node) => ({ ...acc, [node.id]: node }), {});
-                    
+                    const nodesById = nodes.reduce(
+                      (acc: Record<string, NodeT>, node) => ({
+                        ...acc,
+                        [node.id]: node,
+                      }),
+                      {}
+                    );
+
                     while (currentId) {
                       const node = nodesById[currentId];
                       if (!node) break;
                       activePath.unshift(node.role === 'user' ? 'U' : 'A');
                       currentId = node.parentId;
                     }
-                    
-                    return activePath.length > 5 
-                      ? `...${activePath.slice(-5).join('→')}` 
+
+                    return activePath.length > 5
+                      ? `...${activePath.slice(-5).join('→')}`
                       : activePath.join('→');
                   })()}
                 </span>
@@ -340,8 +347,12 @@ export default function ConversationPage() {
         <div className="w-1/2">
           <div className="h-full flex flex-col">
             <div className="p-4 border-b border-gray-200 bg-gray-50">
-              <h2 className="text-lg font-semibold text-gray-900">Conversation Tree</h2>
-              <p className="text-sm text-gray-600">Visual representation of your branching conversation</p>
+              <h2 className="text-lg font-semibold text-gray-900">
+                Conversation Tree
+              </h2>
+              <p className="text-sm text-gray-600">
+                Visual representation of your branching conversation
+              </p>
             </div>
             <Graph
               nodes={nodes}

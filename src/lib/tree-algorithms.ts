@@ -3,15 +3,18 @@ import { NodeT, SwitchSteps } from './types';
 /**
  * Get the path from root to a specific node
  */
-export function pathToRoot(id: string, nodesById: Record<string, NodeT>): string[] {
+export function pathToRoot(
+  id: string,
+  nodesById: Record<string, NodeT>
+): string[] {
   const path: string[] = [];
   let current: string | null = id;
-  
+
   while (current) {
     path.push(current);
     current = nodesById[current]?.parentId ?? null;
   }
-  
+
   return path.reverse(); // root -> target
 }
 
@@ -21,11 +24,11 @@ export function pathToRoot(id: string, nodesById: Record<string, NodeT>): string
 export function findLcaIndex(pathA: string[], pathB: string[]): number {
   const minLength = Math.min(pathA.length, pathB.length);
   let i = 0;
-  
+
   while (i < minLength && pathA[i] === pathB[i]) {
     i++;
   }
-  
+
   return i - 1; // Last common index
 }
 
@@ -40,7 +43,7 @@ export function computeSwitchSteps(
   const currentPath = pathToRoot(currentId, nodesById);
   const targetPath = pathToRoot(targetId, nodesById);
   const lcaIndex = findLcaIndex(currentPath, targetPath);
-  
+
   return {
     lca: currentPath[lcaIndex],
     up: currentPath.slice(lcaIndex + 1).reverse(), // current -> ... -> LCA
@@ -53,8 +56,8 @@ export function computeSwitchSteps(
  */
 export function buildChildrenMap(nodes: NodeT[]): Record<string, string[]> {
   const childrenById: Record<string, string[]> = {};
-  
-  nodes.forEach((node) => {
+
+  nodes.forEach(node => {
     if (node.parentId) {
       if (!childrenById[node.parentId]) {
         childrenById[node.parentId] = [];
@@ -62,7 +65,7 @@ export function buildChildrenMap(nodes: NodeT[]): Record<string, string[]> {
       childrenById[node.parentId].push(node.id);
     }
   });
-  
+
   return childrenById;
 }
 
@@ -71,11 +74,11 @@ export function buildChildrenMap(nodes: NodeT[]): Record<string, string[]> {
  */
 export function buildNodesMap(nodes: NodeT[]): Record<string, NodeT> {
   const nodesById: Record<string, NodeT> = {};
-  
-  nodes.forEach((node) => {
+
+  nodes.forEach(node => {
     nodesById[node.id] = node;
   });
-  
+
   return nodesById;
 }
 
@@ -83,7 +86,7 @@ export function buildNodesMap(nodes: NodeT[]): Record<string, NodeT> {
  * Find the root node of a conversation
  */
 export function findRootNode(nodes: NodeT[]): NodeT | null {
-  return nodes.find((node) => node.parentId === null) || null;
+  return nodes.find(node => node.parentId === null) || null;
 }
 
 /**
@@ -94,5 +97,5 @@ export function getActivePath(
   nodesById: Record<string, NodeT>
 ): NodeT[] {
   const path = pathToRoot(currentNodeId, nodesById);
-  return path.map((id) => nodesById[id]).filter(Boolean);
+  return path.map(id => nodesById[id]).filter(Boolean);
 }

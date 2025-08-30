@@ -29,13 +29,19 @@ const ToastComponent: React.FC<ToastProps> = ({ toast, onRemove }) => {
   const getIcon = () => {
     switch (toast.type) {
       case 'success':
-        return <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />;
+        return (
+          <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+        );
       case 'error':
         return <XCircle className="w-5 h-5 text-red-600 dark:text-red-400" />;
       case 'warning':
-        return <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />;
+        return (
+          <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+        );
       default:
-        return <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400" />;
+        return (
+          <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+        );
     }
   };
 
@@ -60,9 +66,7 @@ const ToastComponent: React.FC<ToastProps> = ({ toast, onRemove }) => {
       className={`max-w-sm w-full ${getBgColor()} border rounded-lg p-3 shadow-lg pointer-events-auto backdrop-blur-sm`}
     >
       <div className="flex items-start">
-        <div className="flex-shrink-0">
-          {getIcon()}
-        </div>
+        <div className="flex-shrink-0">{getIcon()}</div>
         <div className="ml-3 flex-1">
           <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
             {toast.title}
@@ -91,16 +95,15 @@ interface ToastContainerProps {
   onRemove: (id: string) => void;
 }
 
-export const ToastContainer: React.FC<ToastContainerProps> = ({ toasts, onRemove }) => {
+export const ToastContainer: React.FC<ToastContainerProps> = ({
+  toasts,
+  onRemove,
+}) => {
   return (
     <div className="fixed top-4 right-4 z-40 space-y-2 pointer-events-none">
       <AnimatePresence>
-        {toasts.map((toast) => (
-          <ToastComponent
-            key={toast.id}
-            toast={toast}
-            onRemove={onRemove}
-          />
+        {toasts.map(toast => (
+          <ToastComponent key={toast.id} toast={toast} onRemove={onRemove} />
         ))}
       </AnimatePresence>
     </div>
@@ -113,11 +116,11 @@ export const useToast = () => {
 
   const addToast = (toast: Omit<Toast, 'id'>) => {
     const id = Math.random().toString(36).substr(2, 9);
-    setToasts((prev) => [...prev, { ...toast, id }]);
+    setToasts(prev => [...prev, { ...toast, id }]);
   };
 
   const removeToast = (id: string) => {
-    setToasts((prev) => prev.filter((toast) => toast.id !== id));
+    setToasts(prev => prev.filter(toast => toast.id !== id));
   };
 
   const success = (title: string, message?: string) => {
@@ -144,6 +147,8 @@ export const useToast = () => {
     error,
     warning,
     info,
-    ToastContainer: () => <ToastContainer toasts={toasts} onRemove={removeToast} />
+    ToastContainer: () => (
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
+    ),
   };
 };

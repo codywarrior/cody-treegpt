@@ -40,14 +40,14 @@ export function layoutTree(
   treeLayout(root);
 
   // Extract nodes with coordinates
-  const nodes: TreeNode[] = root.descendants().map((d) => ({
+  const nodes: TreeNode[] = root.descendants().map(d => ({
     id: d.data.id,
     x: d.x || 0,
     y: d.y || 0,
   }));
 
   // Extract links between nodes
-  const links: TreeLink[] = root.links().map((l) => ({
+  const links: TreeLink[] = root.links().map(l => ({
     source: {
       id: l.source.data.id,
       x: l.source.x || 0,
