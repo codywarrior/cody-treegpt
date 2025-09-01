@@ -33,30 +33,27 @@ export async function DELETE(
     }
 
     // Get all descendant nodes recursively
-    const getAllDescendants = async (): Promise<string[]> => {
+    const getAllDescendants = async (parentId: string): Promise<string[]> => {
       const childNodes = await prisma.node.findMany({
         where: {
+          parentId: parentId,
           conversationId: node.conversationId,
         },
       });
 
-      // Build tree structure to find all descendants
-      const nodeMap = new Map();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      childNodes.forEach((n: any) => nodeMap.set(n.id, n));
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const childIds = childNodes.map((child: any) => child.id);
-      const allDescendants = [...childIds];
+      const allDescendants: string[] = [];
 
-      for (const _childId of childIds) {
-        const descendants = await getAllDescendants();
-        allDescendants.push(...descendants);
+      for (const child of childNodes) {
+        allDescendants.push(child.id);
+        // Recursively get descendants of this child
+        const childDescendants = await getAllDescendants(child.id);
+        allDescendants.push(...childDescendants);
       }
 
       return allDescendants;
     };
 
-    const descendantIds = await getAllDescendants();
+    const descendantIds = await getAllDescendants(nodeId);
     const allNodeIds = [nodeId, ...descendantIds];
 
     // Delete all nodes in the subgraph

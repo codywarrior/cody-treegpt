@@ -3,10 +3,16 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 
-import { ChatPane } from '@/components/ChatPane';
-import { Graph } from '@/components/Graph';
+import { ChatPaneV2 } from '@/components/ChatPaneV2';
+import Graph from '@/components/Graph';
 // Tree algorithms imported for future LCA animation implementation
-import { ConversationT, NodeT } from '@/lib/types';
+import { ConversationT, NodeT, ChatNodeT } from '@/lib/types';
+import {
+  convertNodesToChatNodes,
+  getChatActivePath,
+  createNewChatNode,
+  updateChatNodeResponse,
+} from '@/lib/chat-utils';
 
 export default function ConversationPage() {
   const params = useParams();
@@ -15,6 +21,7 @@ export default function ConversationPage() {
 
   const [conversation, setConversation] = useState<ConversationT | null>(null);
   const [nodes, setNodes] = useState<NodeT[]>([]);
+  const [chatNodes, setChatNodes] = useState<ChatNodeT[]>([]);
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -31,7 +38,15 @@ export default function ConversationPage() {
         const data = await response.json();
         setConversation(data.conversation);
         setNodes(data.nodes);
-        setActiveNodeId(data.rootNodeId);
+        const convertedChatNodes = convertNodesToChatNodes(data.nodes);
+        setChatNodes(convertedChatNodes);
+
+        // Set active node to the last node in the conversation for initial display
+        const lastNode =
+          convertedChatNodes.length > 0
+            ? convertedChatNodes[convertedChatNodes.length - 1]
+            : null;
+        setActiveNodeId(lastNode?.id || data.rootNodeId);
       } else if (response.status === 404) {
         router.push('/');
       }
@@ -45,6 +60,10 @@ export default function ConversationPage() {
 
   const handleSendMessage = async (text: string, parentId: string | null) => {
     try {
+      // Create new chat node with user query
+      const newChatNode = createNewChatNode(text, parentId, cid);
+
+      // Create user node in database first
       const response = await fetch('/api/nodes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -58,27 +77,15 @@ export default function ConversationPage() {
 
       if (response.ok) {
         const data = await response.json();
-        const newNode = data.node;
-        setNodes(prev => [...prev, newNode]);
-        setActiveNodeId(newNode.id);
+        const userNode = data.node;
 
-        // Create placeholder assistant node immediately
-        const placeholderNode = {
-          id: `temp-${Date.now()}`,
-          conversationId: cid,
-          parentId: newNode.id,
-          role: 'assistant',
-          text: 'Generating...',
-          deleted: false,
-          createdAt: new Date().toISOString(),
-          isGenerating: true,
-        };
+        // Add to chat nodes and nodes state
+        setChatNodes(prev => [...prev, newChatNode]);
+        setNodes(prev => [...prev, userNode]);
+        setActiveNodeId(newChatNode.id);
 
-        setNodes(prev => [...prev, placeholderNode]);
-        setActiveNodeId(placeholderNode.id);
-
-        // Request AI reply
-        handleRequestAIReply(newNode.id, placeholderNode.id);
+        // Pass the chat node directly to avoid timing issues
+        handleRequestAIReply(userNode.id, newChatNode);
       }
     } catch (error) {
       console.error('Failed to send message:', error);
@@ -110,12 +117,22 @@ export default function ConversationPage() {
   };
 
   const handleRequestAIReply = async (
-    nodeId: string,
-    placeholderNodeId?: string
+    userNodeId: string,
+    chatNode?: ChatNodeT
   ) => {
     try {
-      // Don't set global loading - AI thinking will show in the node itself
-      const response = await fetch(`/api/nodes/${nodeId}/ai-reply`, {
+      // If no chat node provided, try to find it (for existing calls from ChatPaneV2)
+      let targetChatNode = chatNode;
+      if (!targetChatNode) {
+        const userNode = nodes.find(n => n.id === userNodeId);
+        targetChatNode = chatNodes.find(cn => cn.query === userNode?.text);
+        if (!targetChatNode) {
+          console.error('Could not find corresponding chat node');
+          return;
+        }
+      }
+
+      const response = await fetch(`/api/nodes/${userNodeId}/ai-reply`, {
         method: 'POST',
       });
 
@@ -142,31 +159,46 @@ export default function ConversationPage() {
                 const data = JSON.parse(line.slice(6));
 
                 if (data.type === 'node') {
-                  // Replace placeholder with actual node
                   aiNode = data.node;
-                  if (placeholderNodeId) {
-                    setNodes(prev =>
-                      prev.map(n => (n.id === placeholderNodeId ? aiNode : n))
-                    );
-                  } else {
-                    setNodes(prev => [...prev, aiNode]);
-                  }
-                  setActiveNodeId(aiNode.id);
+                  setNodes(prev => [...prev, aiNode!]);
                 } else if (data.type === 'content' && aiNode) {
-                  // Streaming content
                   streamingText += data.content;
-                  setNodes(prev =>
-                    prev.map(node =>
-                      node.id === aiNode.id
-                        ? { ...node, text: streamingText }
-                        : node
+                  // Update chat node response
+                  setChatNodes(prev =>
+                    prev.map(cn =>
+                      cn.id === targetChatNode!.id
+                        ? updateChatNodeResponse(cn, streamingText)
+                        : cn
                     )
                   );
+                  // Update nodes array
+                  if (aiNode) {
+                    const aiNodeId = aiNode.id;
+                    setNodes(prev =>
+                      prev.map(node =>
+                        node.id === aiNodeId
+                          ? { ...node, text: streamingText }
+                          : node
+                      )
+                    );
+                  }
                 } else if (data.type === 'complete' && aiNode) {
                   // Final update
-                  setNodes(prev =>
-                    prev.map(node => (node.id === aiNode.id ? data.node : node))
+                  setChatNodes(prev =>
+                    prev.map(cn =>
+                      cn.id === targetChatNode!.id
+                        ? updateChatNodeResponse(cn, data.node.text)
+                        : cn
+                    )
                   );
+                  if (aiNode) {
+                    const aiNodeId = aiNode.id;
+                    setNodes(prev =>
+                      prev.map(node =>
+                        node.id === aiNodeId ? data.node : node
+                      )
+                    );
+                  }
                 } else if (data.type === 'error') {
                   console.error('Streaming error:', data.error);
                 }
@@ -293,32 +325,20 @@ export default function ConversationPage() {
             </h1>
           </div>
           <div className="flex items-center space-x-4 text-sm text-gray-500">
-            <div>{nodes.length} messages</div>
+            <div>{chatNodes.length} conversations</div>
             {activeNodeId && (
               <div className="flex items-center space-x-1">
                 <span>•</span>
                 <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">
                   {(() => {
-                    const activePath = [];
-                    let currentId = activeNodeId;
-                    const nodesById = nodes.reduce(
-                      (acc: Record<string, NodeT>, node) => ({
-                        ...acc,
-                        [node.id]: node,
-                      }),
-                      {}
+                    const activePath = getChatActivePath(
+                      chatNodes,
+                      activeNodeId
                     );
-
-                    while (currentId) {
-                      const node = nodesById[currentId];
-                      if (!node) break;
-                      activePath.unshift(node.role === 'user' ? 'U' : 'A');
-                      currentId = node.parentId;
-                    }
-
-                    return activePath.length > 5
-                      ? `...${activePath.slice(-5).join('→')}`
-                      : activePath.join('→');
+                    const pathLabels = activePath.map(() => 'U→A');
+                    return pathLabels.length > 3
+                      ? `...${pathLabels.slice(-3).join('→')}`
+                      : pathLabels.join('→');
                   })()}
                 </span>
               </div>
@@ -331,14 +351,15 @@ export default function ConversationPage() {
       <div className="flex-1 flex overflow-hidden">
         {/* Chat Pane */}
         <div className="w-1/2 border-r border-gray-200">
-          <ChatPane
-            nodes={nodes}
+          <ChatPaneV2
+            chatNodes={chatNodes}
             activeNodeId={activeNodeId}
             onSendMessage={handleSendMessage}
             onBranchFromNode={handleBranchFromNode}
             onRequestAIReply={handleRequestAIReply}
             onDeleteNode={handleDeleteNode}
             onEditNode={handleEditNode}
+            onNodeSelect={setActiveNodeId}
             className="h-full"
           />
         </div>

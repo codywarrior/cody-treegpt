@@ -37,12 +37,33 @@ export type TreeNode = {
 };
 
 export type TreeLink = {
-  source: TreeNode;
-  target: TreeNode;
+  source: TreeNode | string;
+  target: TreeNode | string;
 };
 
 export type SwitchSteps = {
   lca: string;
   up: string[];
   down: string[];
+};
+
+// Paired chat node type for user/assistant message pairs
+export type ChatNodeT = {
+  id: string;
+  parentId: string | null;
+  children: string[];
+  query: string; // user message
+  response: string; // assistant message
+  assistantText: string; // alias for response
+  model?: string;
+  conversationId: string;
+  createdAt: string;
+};
+
+// Helper type for graph visualization
+export type GraphNode = TreeNode & {
+  chatNode: ChatNodeT;
+  userText: string;
+  assistantText: string;
+  isInActivePath?: boolean;
 };
