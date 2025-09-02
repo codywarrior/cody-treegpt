@@ -1,25 +1,50 @@
-# GPTree - Branching Chat Application
+# GPTree - Tree-Structured AI Conversations
 
-GPTree is a web application that enables branching conversations in a tree structure, allowing users to explore different conversation paths without losing context. Users can branch off from assistant messages to explore sub-concepts and create complex conversation trees.
+A Next.js application enabling branching AI conversations in a tree structure. Create conversation branches, explore different paths, and maintain full context across complex dialogue trees.
 
-## Features
+## Implemented Features
 
-- **Branching Conversations**: Create branches from any assistant message to explore different topics
-- **Tree Visualization**: Interactive graph showing the conversation structure with D3.js
-- **Path-Aware AI**: OpenAI integration that understands the full conversation context
-- **User Authentication**: Secure login system with bcrypt password hashing
-- **Real-time Updates**: Smooth animations and real-time conversation updates
-- **Export/Import**: Save conversations as JSON or Markdown (coming soon)
+- **Tree-Structured Conversations**: Branch from any message to create alternative conversation paths
+- **Interactive Graph Visualization**: D3.js tree layout with node navigation and active path highlighting
+- **Context-Aware AI**: OpenAI GPT-4o-mini integration with path-aware context building (7000 token limit)
+- **Real-Time Streaming**: Server-sent events for live AI response streaming with 60s timeout
+- **Conversation Management**: Create, edit, delete conversations with search and pagination
+- **Export/Import**: JSON and Markdown export/import functionality
+- **Public Sharing**: Generate shareable links for conversations
+- **Dark Mode**: Theme switching with system preference detection
+- **Authentication**: Session-based auth with bcrypt password hashing
 
-## Tech Stack
+## Technical Stack
 
-- **Framework**: Next.js 14 with App Router and TypeScript
-- **Database**: Vercel Postgres with Prisma ORM
-- **UI**: Tailwind CSS with shadcn/ui components
-- **Animations**: Framer Motion
-- **Visualization**: D3.js with SVG rendering
-- **AI**: OpenAI API integration
-- **Authentication**: Manual system with bcrypt and sessions
+### Core Framework
+
+- **Next.js 15.5.2** with App Router and TypeScript
+- **React 19.1.0** with React Server Components
+- **PostgreSQL** with Prisma ORM (v6.15.0)
+
+### UI & Styling
+
+- **Tailwind CSS 4** for styling
+- **Framer Motion 12.23.12** for animations
+- **Radix UI** components (dialogs, tabs, toasts)
+- **Lucide React** for icons
+
+### AI & Data Processing
+
+- **OpenAI API 5.16.0** with GPT-4o-mini model
+- **React Markdown 10.1.0** with syntax highlighting
+- **remark-gfm 4.0.1** and **rehype-highlight 7.0.2**
+
+### Visualization
+
+- **D3.js 7.9.0** with d3-hierarchy and d3-zoom
+- Custom tree layout algorithms for node positioning
+
+### Authentication & Security
+
+- **bcryptjs 3.0.2** for password hashing
+- Session-based authentication with secure cookies
+- Rate limiting (10 requests/minute per user)
 
 ## Getting Started
 
@@ -73,39 +98,61 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) to see the application.
 
-## Usage
+## Branching Implementation
 
-1. **Sign Up/Login**: Create an account or log in to access your conversations
-2. **Create Conversation**: Start a new conversation from the home page
-3. **Send Messages**: Type messages in the chat interface
-4. **Branch Conversations**: Click the branch icon on assistant messages to create new paths
-5. **Navigate Tree**: Use the graph visualization to navigate between different conversation paths
-6. **AI Replies**: Click the bot icon to request AI responses that understand the full conversation context
+### Tree Structure
+
+- Each conversation node has a `parentId` creating a directed acyclic graph (DAG)
+- Active path calculation: `getActivePath()` traverses from selected node to root
+- Context building: `buildAIContext()` with 7000 token limit and recent message prioritization
+- AI responses streamed via Server-Sent Events and stored as child nodes
+
+### Core Algorithms
+
+- **Path Finding**: `pathToRoot()` and `findLcaIndex()` for efficient tree traversal
+- **Context Management**: Token estimation and summarization for long conversation paths
+- **Rate Limiting**: 10 requests/minute per user with IP-based tracking
+
+### Graph Visualization
+
+- **D3.js Tree Layout**: Hierarchical positioning with `d3.tree()` and custom spacing
+- **Interactive Navigation**: Click nodes to switch conversation branches
+- **Active Path Highlighting**: Visual emphasis on current conversation thread
 
 ## Project Structure
 
 ```
 src/
-├── app/                 # Next.js app router pages and API routes
-│   ├── api/            # API endpoints
-│   ├── auth/           # Authentication pages
-│   └── c/[cid]/        # Conversation workspace
-├── components/         # React components
-│   ├── ChatPane.tsx    # Chat interface
-│   └── Graph.tsx       # Tree visualization
-├── lib/                # Utilities and core logic
-│   ├── auth.ts         # Authentication helpers
-│   ├── db.ts           # Database client
-│   ├── tree-algorithms.ts  # Tree traversal algorithms
-│   └── types.ts        # TypeScript type definitions
-└── prisma/             # Database schema
+├── app/
+│   ├── api/
+│   │   ├── auth/                    # login, logout, signup endpoints
+│   │   ├── conversations/           # CRUD for conversations
+│   │   ├── nodes/[nodeId]/ai-reply/ # SSE streaming for AI responses
+│   │   ├── export/[cid]/           # JSON/Markdown export
+│   │   └── share/                  # Public sharing tokens
+│   ├── c/[cid]/                    # Conversation workspace pages
+│   └── auth/signin/                # Authentication UI
+├── components/
+│   ├── ChatPaneV2.tsx              # Chat interface with branching
+│   ├── Graph.tsx                   # D3.js tree visualization
+│   ├── ExportImportDialog.tsx      # Export/import functionality
+│   └── ShareDialog.tsx             # Public sharing interface
+├── lib/
+│   ├── ai-context.ts               # Context building & token management
+│   ├── tree-algorithms.ts          # Path finding & tree traversal
+│   ├── auth.ts                     # Session management
+│   └── types.ts                    # TypeScript definitions
+└── prisma/schema.prisma            # Database schema
 ```
 
-## Core Algorithms
+## Usage
 
-- **Path Finding**: Efficient algorithms to find paths between nodes
-- **LCA (Lowest Common Ancestor)**: Used for smooth transitions between conversation branches
-- **Tree Layout**: D3.js hierarchy layout for optimal graph visualization
+1. **Authentication**: Sign up/login with email and password
+2. **Create Conversations**: Start new branching conversations from the dashboard
+3. **Send Messages**: Type in the chat interface (Enter to send, Shift+Enter for new line)
+4. **Branch Creation**: Click branch icon on any message to create alternative conversation paths
+5. **Tree Navigation**: Click nodes in the graph to switch between conversation branches
+6. **AI Responses**: Automatic streaming responses with retry options
 
 ## Contributing
 
