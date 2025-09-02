@@ -84,14 +84,14 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
                   {title}
                 </h3>
                 <div className="mt-2">
-                  <p className="text-sm text-gray-600 dark:text-gray-300 whitespace-pre-line">
+                  <p className="text-sm text-gray-700 dark:text-gray-200 whitespace-pre-line">
                     {message}
                   </p>
                 </div>
               </div>
               <div className="ml-4 flex-shrink-0">
                 <button
-                  className="p-1 rounded-md text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-300 transition-colors"
+                  className="p-1 rounded-md text-gray-400 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300 transition-colors"
                   onClick={onCancel}
                 >
                   <X className="h-4 w-4" />
@@ -103,7 +103,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           <div className="bg-gray-50 dark:bg-gray-700/50 px-6 py-4 flex justify-end space-x-3 rounded-b-xl border-t border-gray-200 dark:border-gray-600">
             <button
               type="button"
-              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-300 dark:focus:ring-gray-400 transition-colors"
+              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-300 dark:focus:ring-gray-400 transition-colors"
               onClick={onCancel}
             >
               {cancelText}

@@ -2,10 +2,12 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import { ChevronLeft, ChevronRight, Eye, EyeOff } from 'lucide-react';
 
-import { ChatPaneV2 } from '@/components/ChatPaneV2';
+import ChatPaneV2 from '@/components/ChatPaneV2';
 import Graph from '@/components/Graph';
 import ShareModal from '@/components/ShareModal';
+import { useToast } from '@/components/Toast';
 import {
   convertNodesToChatNodes,
   getChatActivePath,
@@ -33,6 +35,8 @@ export default function ConversationPage() {
     isOpen: boolean;
     file: File | null;
   }>({ isOpen: false, file: null });
+  const [isGraphCollapsed, setIsGraphCollapsed] = useState(false);
+  const toast = useToast();
 
   // Memoize expensive computations
   const chatNodes = useMemo(() => convertNodesToChatNodes(nodes), [nodes]);
@@ -162,6 +166,11 @@ export default function ConversationPage() {
         }
       }
 
+      // For retries, remove any existing assistant node for this parent
+      setNodes(prev =>
+        prev.filter(n => !(n.parentId === userNodeId && n.role === 'assistant'))
+      );
+
       const response = await fetch(`/api/nodes/${userNodeId}/ai-reply`, {
         method: 'POST',
       });
@@ -191,7 +200,12 @@ export default function ConversationPage() {
                 if (data.type === 'node') {
                   aiNode = data.node;
                   setNodes(prev => {
-                    const updated = [...prev, aiNode!];
+                    // Remove any existing assistant node for this parent (in case of retry)
+                    const filtered = prev.filter(
+                      n =>
+                        !(n.parentId === userNodeId && n.role === 'assistant')
+                    );
+                    const updated = [...filtered, aiNode!];
                     return updated;
                   });
                 } else if (data.type === 'content' && aiNode) {
@@ -318,23 +332,48 @@ export default function ConversationPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
+    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
+      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 md:px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <button
               onClick={() => router.push('/')}
-              className="text-gray-500 hover:text-gray-700"
+              className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 flex items-center"
             >
-              ← Back
+              <ChevronLeft className="w-4 h-4 mr-1" />
+              <span className="hidden sm:inline">Back</span>
             </button>
-            <h1 className="text-xl font-semibold text-gray-900">
+            <h1 className="text-lg md:text-xl font-semibold text-gray-900 dark:text-white truncate">
               {conversation.title}
             </h1>
           </div>
-          <div className="flex items-center space-x-4 text-sm text-gray-500">
-            <div>{chatNodes.length} nodes</div>
+          <div className="flex items-center space-x-2 md:space-x-4 text-sm text-gray-500 dark:text-gray-400">
+            <div className="hidden sm:block">{chatNodes.length} nodes</div>
+
+            {/* Mobile Graph Toggle */}
+            <button
+              onClick={() => setIsGraphCollapsed(!isGraphCollapsed)}
+              className="md:hidden p-2 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              title={isGraphCollapsed ? 'Show Graph' : 'Hide Graph'}
+            >
+              {isGraphCollapsed ? (
+                <Eye className="w-4 h-4" />
+              ) : (
+                <EyeOff className="w-4 h-4" />
+              )}
+            </button>
+
+            {/* Desktop Show Graph Button - when collapsed */}
+            {isGraphCollapsed && (
+              <button
+                onClick={() => setIsGraphCollapsed(false)}
+                className="hidden md:block p-2 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                title="Show Graph"
+              >
+                <Eye className="w-4 h-4" />
+              </button>
+            )}
 
             <div className="flex items-center space-x-2">
               <input
@@ -351,7 +390,7 @@ export default function ConversationPage() {
               />
               <label
                 htmlFor="import-file"
-                className="px-3 py-1 bg-purple-500 text-white rounded text-xs hover:bg-purple-600 cursor-pointer"
+                className="px-2 md:px-3 py-1 bg-purple-500 text-white rounded text-xs hover:bg-purple-600 cursor-pointer"
               >
                 Import
               </label>
@@ -372,7 +411,7 @@ export default function ConversationPage() {
                     console.error('Export failed:', error);
                   }
                 }}
-                className="px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
+                className="px-2 md:px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
               >
                 Export
               </button>
@@ -394,7 +433,7 @@ export default function ConversationPage() {
                     console.error('Share failed:', error);
                   }
                 }}
-                className="px-3 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600"
+                className="px-2 md:px-3 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600"
               >
                 Share
               </button>
@@ -406,13 +445,19 @@ export default function ConversationPage() {
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Chat Pane */}
-        <div className="w-1/2 border-r border-gray-200">
+        <div
+          className={`transition-all duration-300 ${
+            isGraphCollapsed
+              ? 'w-full'
+              : 'w-full md:w-1/2 border-r border-gray-200 dark:border-gray-700'
+          }`}
+        >
           <ChatPaneV2
             chatNodes={chatNodes}
-            activeNodeId={activeNodeId}
+            activeNodeId={activeNodeId || ''}
             onSendMessage={handleSendMessage}
             onBranchFromNode={handleBranchFromNode}
-            onNodeSelect={nodeId => {
+            onNodeSelect={(nodeId: string) => {
               // Keep the ChatPane display as-is, just update active node for graph highlighting
               setActiveNodeId(nodeId);
             }}
@@ -423,17 +468,32 @@ export default function ConversationPage() {
           />
         </div>
 
+        {/* Graph Toggle Button */}
+        {!isGraphCollapsed && (
+          <div className="hidden md:flex flex-col justify-center">
+            <button
+              onClick={() => setIsGraphCollapsed(!isGraphCollapsed)}
+              className="p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-l-lg shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors z-10"
+              title="Hide Graph"
+            >
+              <ChevronRight className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+            </button>
+          </div>
+        )}
+
         {/* Graph Pane */}
-        <div className="w-1/2">
-          <Graph
-            nodes={nodes}
-            activeNodeId={activeNodeId}
-            onNodeClick={nodeId => {
-              setActiveNodeId(nodeId);
-            }}
-            className="h-full w-full"
-          />
-        </div>
+        {!isGraphCollapsed && (
+          <div className="hidden md:block w-1/2 transition-all duration-300">
+            <Graph
+              nodes={nodes}
+              activeNodeId={activeNodeId}
+              onNodeClick={nodeId => {
+                setActiveNodeId(nodeId);
+              }}
+              className="h-full w-full"
+            />
+          </div>
+        )}
       </div>
 
       {/* Share Modal */}
@@ -533,6 +593,7 @@ export default function ConversationPage() {
           </div>
         </div>
       )}
+      <toast.ToastContainer />
     </div>
   );
 }

@@ -214,7 +214,10 @@ export default function Graph({
         return linkGenerator({ source, target } as any);
       })
       .attr('fill', 'none')
-      .attr('stroke', '#ccc')
+      .attr('stroke', (link: TreeLink) => {
+        const isDark = document.documentElement.classList.contains('dark');
+        return isDark ? '#6b7280' : '#9ca3af'; // gray-500 : gray-400
+      })
       .attr('stroke-width', 2);
 
     // Render nodes with enhanced styling
@@ -249,37 +252,73 @@ export default function Graph({
       .attr('x', -100)
       .attr('y', -40)
       .attr('rx', 8)
-      .attr('fill', (d: GraphNode) => (d.isActive ? '#3b82f6' : '#f8fafc'))
-      .attr('stroke', (d: GraphNode) => (d.isActive ? '#1d4ed8' : '#e2e8f0'))
-      .attr('stroke-width', 2);
+      .attr('ry', 8)
+      .attr('fill', (d: GraphNode) => {
+        const isActive = activeNodeId === d.id;
+        const isDark = document.documentElement.classList.contains('dark');
+        if (isActive) {
+          return isDark ? '#3b82f6' : '#3b82f6'; // blue-500
+        }
+        return isDark ? '#374151' : '#f8fafc'; // gray-700 : slate-50
+      })
+      .attr('stroke', (d: GraphNode) => {
+        const isActive = activeNodeId === d.id;
+        const isDark = document.documentElement.classList.contains('dark');
+        if (isActive) {
+          return isDark ? '#1d4ed8' : '#1e40af'; // blue-700 : blue-800
+        }
+        return isDark ? '#4b5563' : '#e2e8f0'; // gray-600 : slate-200
+      })
+      .attr('stroke-width', 2)
+      .style('cursor', 'pointer');
 
+    // User text (top half of node)
     nodeSelection
       .append('text')
-      .attr('y', -15)
+      .attr('x', 0)
+      .attr('y', -10)
       .attr('text-anchor', 'middle')
-      .attr('font-size', '12px')
+      .attr('dominant-baseline', 'middle')
+      .attr('font-size', '10px')
       .attr('font-weight', 'bold')
-      .attr('fill', (d: GraphNode) => (d.isActive ? 'white' : '#374151'))
+      .attr('fill', (d: GraphNode) => {
+        const isActive = activeNodeId === d.id;
+        const isDark = document.documentElement.classList.contains('dark');
+        if (isActive) {
+          return '#ffffff'; // white for active nodes
+        }
+        return isDark ? '#f9fafb' : '#111827'; // gray-50 : gray-900
+      })
       .text((d: GraphNode) => {
-        const text = d.userText || 'User';
+        const text = d.userText || 'No message';
         return text.length > 25 ? text.substring(0, 25) + '...' : text;
       });
 
+    // Assistant text (bottom half of node)
     nodeSelection
       .append('text')
-      .attr('y', 5)
+      .attr('x', 0)
+      .attr('y', 15)
       .attr('text-anchor', 'middle')
-      .attr('font-size', '11px')
-      .attr('fill', (d: GraphNode) => (d.isActive ? '#e5e7eb' : '#6b7280'))
+      .attr('dominant-baseline', 'middle')
+      .attr('font-size', '9px')
+      .attr('fill', (d: GraphNode) => {
+        const isActive = activeNodeId === d.id;
+        const isDark = document.documentElement.classList.contains('dark');
+        if (isActive) {
+          return '#e0e7ff'; // indigo-100 for active nodes
+        }
+        return isDark ? '#d1d5db' : '#4b5563'; // gray-300 : gray-600
+      })
       .text((d: GraphNode) => {
-        const text = d.assistantText || 'Assistant';
+        const text = d.assistantText || 'No response';
         return text.length > 30 ? text.substring(0, 30) + '...' : text;
       });
 
     // No force simulation needed - using tree layout positioning
 
-    // Auto-center on active node
-    if (activeNodeId && shouldCenter.current) {
+    // Auto-center on first render or when activeNodeId changes
+    if (shouldCenter.current && treeData.nodes.length > 0) {
       const activeNode = treeData.nodes.find(n => n.id === activeNodeId);
       if (activeNode) {
         const transform = d3.zoomIdentity
@@ -287,30 +326,39 @@ export default function Graph({
             dimensions.width / 2 - activeNode.x,
             dimensions.height / 2 - activeNode.y
           )
-          .scale(1);
-
-        svg.transition().duration(750).call(zoom.transform, transform);
+          .scale(0.8);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        svg.call(zoom.transform as any, transform);
         shouldCenter.current = false;
       }
     }
-  }, [treeData, dimensions, activeNodeId, onNodeClick, dimensions.width]);
+  }, [treeData, dimensions, activeNodeId]);
+
+  // Update SVG background for dark mode
+  useEffect(() => {
+    if (!svgRef.current) return;
+    const svg = d3.select(svgRef.current);
+    const isDark = document.documentElement.classList.contains('dark');
+    svg.style('background-color', isDark ? '#1f2937' : '#ffffff');
+  }, []);
 
   return (
     <div className={`relative ${className || ''}`}>
-      <svg ref={svgRef} width="100%" height="100%" className="bg-white" />
+      <svg
+        ref={svgRef}
+        width="100%"
+        height="100%"
+        className="bg-white dark:bg-gray-800"
+      />
       {tooltip && (
         <div
-          className="absolute bg-gray-900 text-white p-3 rounded shadow-lg pointer-events-none z-10 max-w-sm"
+          className="absolute bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-xs p-3 rounded-lg shadow-xl pointer-events-none z-10 max-w-xs border border-gray-700 dark:border-gray-300"
           style={{
-            left: Math.min(tooltip.x + 10, dimensions.width - 200),
-            top: Math.max(tooltip.y - 10, 10),
-            transform:
-              tooltip.x > dimensions.width - 200 ? 'translateX(-100%)' : 'none',
+            left: tooltip.x,
+            top: tooltip.y,
           }}
         >
-          <div className="text-sm whitespace-pre-wrap break-words">
-            {tooltip.text}
-          </div>
+          <pre className="whitespace-pre-wrap font-mono">{tooltip.text}</pre>
         </div>
       )}
     </div>

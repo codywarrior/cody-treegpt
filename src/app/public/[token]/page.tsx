@@ -87,22 +87,14 @@ export default function PublicSharePage() {
         );
     }
 
-    // Show path from root to the shared node
-    const nodesById = new Map(nodes.map(n => [n.id, n]));
-    const path: NodeT[] = [];
-    let currentNode = nodesById.get(startNodeId);
-
-    // Build path to root
-    while (currentNode) {
-      if (!currentNode.deleted) {
-        path.unshift(currentNode);
-      }
-      currentNode = currentNode.parentId
-        ? nodesById.get(currentNode.parentId)
-        : undefined;
-    }
-
-    return path;
+    // The API already returns the correct nodes including assistant responses
+    // Just filter out deleted nodes and sort by creation time
+    return nodes
+      .filter(n => !n.deleted)
+      .sort(
+        (a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      );
   };
 
   if (loading) {

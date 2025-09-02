@@ -218,164 +218,217 @@ export default function AccountPage() {
   }
 
   return (
-    <div className="container max-w-2xl mx-auto py-8 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Account Settings</h1>
-        <p className="text-muted-foreground">
-          Manage your account information and preferences
-        </p>
-      </div>
-
-      {/* Account Overview */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <User className="w-5 h-5" />
-            Account Overview
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="flex items-center gap-2">
-              <Mail className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Email:</span>
-              <span className="font-medium">{accountInfo.email}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Joined:</span>
-              <span className="font-medium">
-                {new Date(accountInfo.createdAt).toLocaleDateString()}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <MessageSquare className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">
-                Conversations:
-              </span>
-              <span className="font-medium">
-                {accountInfo.conversationCount}
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
+      {/* Header */}
+      <header className="bg-white dark:bg-gray-900 shadow-sm border-b border-gray-200 dark:border-gray-700">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center">
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                GPTree
+              </h1>
+              <span className="ml-3 text-sm text-gray-500 dark:text-gray-400">
+                Account Settings
               </span>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </header>
 
-      {/* Profile Settings */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Profile Information</CardTitle>
-          <CardDescription>
-            Update your personal information and email address
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="displayName">Display Name</Label>
-            <Input
-              id="displayName"
-              value={displayName}
-              onChange={e => setDisplayName(e.target.value)}
-              placeholder="Enter your display name"
-            />
-          </div>
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="space-y-6">
+          {/* Account Overview */}
+          <Card className="border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+            <CardHeader className="">
+              <CardTitle className="text-xl font-semibold text-gray-900 dark:text-white flex items-center">
+                <User className="w-5 h-5 mr-2" />
+                Account Information
+              </CardTitle>
+              <CardDescription className="text-gray-600 dark:text-gray-400">
+                Manage your account details and preferences
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div>
+                    <Label
+                      htmlFor="email"
+                      className="text-sm font-medium text-gray-700 dark:text-gray-300"
+                    >
+                      Email Address
+                    </Label>
+                    <div className="mt-1 flex items-center space-x-2">
+                      <Mail className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+                      <Input
+                        id="email"
+                        type="email"
+                        value={email}
+                        onChange={e => setEmail(e.target.value)}
+                        className="flex-1 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                        placeholder="Enter your email"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label
+                      htmlFor="displayName"
+                      className="text-sm font-medium text-gray-700 dark:text-gray-300"
+                    >
+                      Display Name
+                    </Label>
+                    <div className="mt-1 flex items-center space-x-2">
+                      <User className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+                      <Input
+                        id="displayName"
+                        value={displayName}
+                        onChange={e => setDisplayName(e.target.value)}
+                        className="flex-1 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                        placeholder="Enter your display name"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <Label
+                      htmlFor="conversationCount"
+                      className="text-sm font-medium text-gray-700 dark:text-gray-300"
+                    >
+                      Conversation Count
+                    </Label>
+                    <div className="mt-1 flex items-center space-x-2">
+                      <MessageSquare className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+                      <span className="text-gray-900 dark:text-white">
+                        {accountInfo.conversationCount}
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <Label
+                      htmlFor="createdAt"
+                      className="text-sm font-medium text-gray-700 dark:text-gray-300"
+                    >
+                      Joined
+                    </Label>
+                    <div className="mt-1 flex items-center space-x-2">
+                      <Calendar className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+                      <span className="text-gray-900 dark:text-white">
+                        {new Date(accountInfo.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-          <div className="space-y-2">
-            <Label htmlFor="email">Email Address</Label>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="Enter your email"
-            />
-          </div>
-        </CardContent>
-      </Card>
+          {/* Password Settings */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Change Password</CardTitle>
+              <CardDescription>
+                Update your password to keep your account secure
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label
+                  htmlFor="currentPassword"
+                  className="text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  Current Password
+                </Label>
+                <Input
+                  id="currentPassword"
+                  type="password"
+                  value={currentPassword}
+                  onChange={e => setCurrentPassword(e.target.value)}
+                  className="flex-1 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                  placeholder="Enter current password"
+                />
+              </div>
 
-      {/* Password Settings */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Change Password</CardTitle>
-          <CardDescription>
-            Update your password to keep your account secure
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="currentPassword">Current Password</Label>
-            <Input
-              id="currentPassword"
-              type="password"
-              value={currentPassword}
-              onChange={e => setCurrentPassword(e.target.value)}
-              placeholder="Enter current password"
-            />
-          </div>
+              <div className="space-y-2">
+                <Label
+                  htmlFor="newPassword"
+                  className="text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  New Password
+                </Label>
+                <Input
+                  id="newPassword"
+                  type="password"
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  className="flex-1 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                  placeholder="Enter new password (min 8 characters)"
+                />
+              </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="newPassword">New Password</Label>
-            <Input
-              id="newPassword"
-              type="password"
-              value={newPassword}
-              onChange={e => setNewPassword(e.target.value)}
-              placeholder="Enter new password (min 8 characters)"
-            />
-          </div>
+              <div className="space-y-2">
+                <Label
+                  htmlFor="confirmPassword"
+                  className="text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  Confirm New Password
+                </Label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  className="flex-1 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                  placeholder="Confirm new password"
+                />
+              </div>
+            </CardContent>
+          </Card>
 
-          <div className="space-y-2">
-            <Label htmlFor="confirmPassword">Confirm New Password</Label>
-            <Input
-              id="confirmPassword"
-              type="password"
-              value={confirmPassword}
-              onChange={e => setConfirmPassword(e.target.value)}
-              placeholder="Confirm new password"
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Actions */}
-      <div className="flex justify-between">
-        <Button
-          onClick={handlePasswordSubmit}
-          disabled={saving}
-          className="flex items-center gap-2"
-        >
-          <Save className="w-4 h-4" />
-          {saving ? 'Saving...' : 'Save Changes'}
-        </Button>
-
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button variant="destructive" className="flex items-center gap-2">
-              <Trash2 className="w-4 h-4" />
-              Delete Account
+          {/* Actions */}
+          <div className="flex flex-col sm:flex-row justify-between pt-4 border-t border-gray-200 dark:border-gray-600 space-y-3 sm:space-y-0">
+            <Button
+              onClick={handlePasswordSubmit}
+              disabled={saving}
+              className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white px-6"
+            >
+              <Save className="w-4 h-4 mr-2" />
+              {saving ? 'Saving...' : 'Save Changes'}
             </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete Account</AlertDialogTitle>
-              <AlertDialogDescription>
-                This action cannot be undone. This will permanently delete your
-                account and remove all your conversations and data from our
-                servers.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={handleDeleteAccount}
-                disabled={deleting}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              >
-                {deleting ? 'Deleting...' : 'Delete Account'}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="destructive"
+                  className="flex items-center justify-center gap-2 w-full sm:w-auto"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Delete Account
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete Account</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This action cannot be undone. This will permanently delete
+                    your account and remove all your conversations and data from
+                    our servers.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleDeleteAccount}
+                    disabled={deleting}
+                    className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
+                  >
+                    {deleting ? 'Deleting...' : 'Delete Account'}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        </div>
       </div>
     </div>
   );

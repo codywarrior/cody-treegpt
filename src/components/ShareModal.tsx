@@ -36,15 +36,15 @@ export default function ShareModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b">
-          <h2 className="text-lg font-semibold text-gray-900">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
             Share Conversation
           </h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -53,11 +53,11 @@ export default function ShareModal({
         {/* Content */}
         <div className="p-6">
           <div className="mb-4">
-            <h3 className="font-medium text-gray-900 mb-2">
+            <h3 className="font-medium text-gray-900 dark:text-white mb-2">
               {conversationTitle}
             </h3>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-              <p className="text-sm text-blue-800">
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-4">
+              <p className="text-sm text-blue-800 dark:text-blue-200">
                 <strong>Active Path Sharing:</strong> This link shares only the
                 current conversation path you&apos;re viewing. For the complete
                 conversation with all branches, use the Export feature instead.
@@ -67,7 +67,7 @@ export default function ShareModal({
 
           {/* Share URL */}
           <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Share Link
             </label>
             <div className="flex">
@@ -75,7 +75,7 @@ export default function ShareModal({
                 type="text"
                 value={shareUrl}
                 readOnly
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-l-md bg-gray-50 text-sm font-mono"
+                className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-l-md bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm font-mono"
               />
               <button
                 onClick={handleCopy}
@@ -100,7 +100,7 @@ export default function ShareModal({
           <div className="flex space-x-3">
             <button
               onClick={handleOpen}
-              className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors flex items-center justify-center space-x-2"
+              className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex items-center justify-center space-x-2"
             >
               <ExternalLink className="w-4 h-4" />
               <span>Open Link</span>

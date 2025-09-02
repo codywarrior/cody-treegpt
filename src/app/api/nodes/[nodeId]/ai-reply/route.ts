@@ -52,6 +52,25 @@ export async function POST(
       orderBy: { createdAt: 'asc' },
     });
 
+    // Check if there's already an assistant node for this parent (retry scenario)
+    const existingAssistantNode = allNodes.find(
+      n => n.parentId === nodeId && n.role === 'assistant'
+    );
+
+    // If this is a retry, delete the existing assistant node first
+    if (existingAssistantNode) {
+      await prisma.node.delete({
+        where: { id: existingAssistantNode.id },
+      });
+      // Remove from allNodes array for path building
+      const nodeIndex = allNodes.findIndex(
+        n => n.id === existingAssistantNode.id
+      );
+      if (nodeIndex !== -1) {
+        allNodes.splice(nodeIndex, 1);
+      }
+    }
+
     // Build nodes map and get active path
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const nodesById: Record<string, any> = {};
@@ -94,7 +113,7 @@ export async function POST(
       throw error;
     }
 
-    // Create AI reply node with placeholder text
+    // Create new AI reply node with placeholder text
     const aiNode = await prisma.node.create({
       data: {
         conversationId: node.conversationId,

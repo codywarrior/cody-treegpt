@@ -44,11 +44,13 @@ export default function SignInPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-xl shadow-lg">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
+      <div className="max-w-md w-full space-y-8 p-8 bg-white dark:bg-gray-800 rounded-xl shadow-lg">
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">GPTree</h1>
-          <h2 className="text-xl text-gray-600">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+            GPTree
+          </h1>
+          <h2 className="text-xl text-gray-600 dark:text-gray-300">
             {isSignUp ? 'Create your account' : 'Sign in to your account'}
           </h2>
         </div>
@@ -57,7 +59,7 @@ export default function SignInPage() {
           <div>
             <label
               htmlFor="email"
-              className="block text-sm font-medium text-gray-700"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300"
             >
               Email
             </label>
@@ -67,7 +69,7 @@ export default function SignInPage() {
               value={email}
               onChange={e => setEmail(e.target.value)}
               required
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
 
@@ -75,7 +77,7 @@ export default function SignInPage() {
             <div>
               <label
                 htmlFor="displayName"
-                className="block text-sm font-medium text-gray-700"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300"
               >
                 Display Name (optional)
               </label>
@@ -84,7 +86,7 @@ export default function SignInPage() {
                 type="text"
                 value={displayName}
                 onChange={e => setDisplayName(e.target.value)}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
           )}
@@ -92,7 +94,7 @@ export default function SignInPage() {
           <div>
             <label
               htmlFor="password"
-              className="block text-sm font-medium text-gray-700"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300"
             >
               Password
             </label>
@@ -102,7 +104,7 @@ export default function SignInPage() {
               value={password}
               onChange={e => setPassword(e.target.value)}
               required
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
 
