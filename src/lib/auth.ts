@@ -145,6 +145,13 @@ export async function destroySession(): Promise<void> {
 }
 
 /**
+ * Clear session (alias for destroySession)
+ */
+export async function clearSession(): Promise<void> {
+  return destroySession();
+}
+
+/**
  * Require authentication - redirect to login if not authenticated
  */
 export async function requireAuth(): Promise<UserT> {

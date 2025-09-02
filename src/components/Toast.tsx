@@ -123,20 +123,20 @@ export const useToast = () => {
     setToasts(prev => prev.filter(toast => toast.id !== id));
   };
 
-  const success = (title: string, message?: string) => {
-    addToast({ type: 'success', title, message });
+  const success = (title: string, message?: string, duration?: number) => {
+    addToast({ type: 'success', title, message, duration: duration || 2000 });
   };
 
-  const error = (title: string, message?: string) => {
-    addToast({ type: 'error', title, message });
+  const error = (title: string, message?: string, duration?: number) => {
+    addToast({ type: 'error', title, message, duration: duration || 2000 });
   };
 
-  const warning = (title: string, message?: string) => {
-    addToast({ type: 'warning', title, message });
+  const warning = (title: string, message?: string, duration?: number) => {
+    addToast({ type: 'warning', title, message, duration: duration || 2000 });
   };
 
-  const info = (title: string, message?: string) => {
-    addToast({ type: 'info', title, message });
+  const info = (title: string, message?: string, duration?: number) => {
+    addToast({ type: 'info', title, message, duration: duration || 2000 });
   };
 
   return {

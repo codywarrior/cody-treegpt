@@ -62,8 +62,10 @@ export type ChatNodeT = {
 
 // Helper type for graph visualization
 export type GraphNode = TreeNode & {
+  level: number;
+  children: GraphNode[];
   chatNode: ChatNodeT;
   userText: string;
   assistantText: string;
-  isInActivePath?: boolean;
+  isActive: boolean;
 };

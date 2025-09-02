@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 
 interface TooltipProps {
   children: React.ReactNode;
@@ -23,9 +23,9 @@ export const Tooltip: React.FC<TooltipProps> = ({
   });
   const triggerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
-  const timeoutRef = useRef<NodeJS.Timeout>();
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const calculatePosition = () => {
+  const calculatePosition = useCallback(() => {
     if (!triggerRef.current || !tooltipRef.current) return;
 
     const triggerRect = triggerRef.current.getBoundingClientRect();
@@ -89,7 +89,7 @@ export const Tooltip: React.FC<TooltipProps> = ({
     );
 
     setTooltipPosition({ x, y, placement });
-  };
+  }, [position]);
 
   const showTooltip = () => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -107,7 +107,7 @@ export const Tooltip: React.FC<TooltipProps> = ({
     if (isVisible) {
       calculatePosition();
     }
-  }, [isVisible]);
+  }, [position, isVisible, calculatePosition]);
 
   useEffect(() => {
     return () => {

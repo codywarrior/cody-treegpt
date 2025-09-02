@@ -1,21 +1,15 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Send,
-  Edit2,
-  Trash2,
-  ChevronLeft,
-  ChevronRight,
-  RotateCcw,
-  Copy,
-  ThumbsUp,
-  ThumbsDown,
-} from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
+import { MessageSquare, MoreHorizontal, Trash2, Send } from 'lucide-react';
 import { ChatNodeT } from '../lib/types';
 import { getChatActivePath } from '../lib/chat-utils';
 import { useToast } from './Toast';
+import '../styles/markdown.css';
 
 interface ChatPaneV2Props {
   chatNodes: ChatNodeT[];
@@ -50,13 +44,13 @@ export function ChatPaneV2({
   const [editingText, setEditingText] = useState<string>('');
   const [deleteConfirm, setDeleteConfirm] = useState<{
     nodeId: string;
-    nodeText: string;
+    content: string;
   } | null>(null);
-  // State for keyboard navigation
-  const [selectedChildIndex, setSelectedChildIndex] = useState<
+  const [selectedChildIndices, setSelectedChildIndices] = useState<
     Record<string, number>
   >({});
-  const toast = useToast();
+  const { success: toastSuccess, error: toastError } = useToast();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const chatNodeMap = new Map(chatNodes.map(node => [node.id, node]));
   const activePathIds = getChatActivePath(chatNodes, activeNodeId);
@@ -64,53 +58,42 @@ export function ChatPaneV2({
     .map(id => chatNodeMap.get(id))
     .filter((node): node is ChatNodeT => node !== undefined);
 
-  // Keyboard navigation for treegpt-style interaction
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Only handle keys when not editing and not in input field
-      if (
-        editingNodeId ||
-        (e.target as HTMLElement)?.tagName === 'INPUT' ||
-        (e.target as HTMLElement)?.tagName === 'TEXTAREA'
-      ) {
-        return;
-      }
+      if (!activeNodeId) return;
 
-      const lastNode = activePath[activePath.length - 1];
-      if (!lastNode) return;
+      const activeNode = chatNodes.find(node => node.id === activeNodeId);
+      if (!activeNode) return;
 
-      const children = getNodeChildren(lastNode.id);
+      const children = chatNodes.filter(node => node.parentId === activeNodeId);
       if (children.length <= 1) return;
 
-      const currentIndex = selectedChildIndex[lastNode.id] || 0;
+      const currentIndex = selectedChildIndices[activeNodeId] || 0;
 
       if (e.key === 'h' && currentIndex > 0) {
-        // Navigate left (previous branch)
         e.preventDefault();
-        setSelectedChildIndex(prev => ({
+        setSelectedChildIndices(prev => ({
           ...prev,
-          [lastNode.id]: currentIndex - 1,
+          [activeNodeId]: currentIndex - 1,
         }));
       } else if (e.key === 'l' && currentIndex < children.length - 1) {
-        // Navigate right (next branch)
         e.preventDefault();
-        setSelectedChildIndex(prev => ({
+        setSelectedChildIndices(prev => ({
           ...prev,
-          [lastNode.id]: currentIndex + 1,
+          [activeNodeId]: currentIndex + 1,
         }));
       } else if (e.key === 'j') {
-        // Navigate down (select current branch)
         e.preventDefault();
-        const selectedChildId = children[currentIndex];
-        if (selectedChildId && onNodeSelect) {
-          onNodeSelect(selectedChildId);
+        const selectedChild = children[currentIndex];
+        if (selectedChild) {
+          onNodeSelect?.(selectedChild.id);
         }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activePath, selectedChildIndex, editingNodeId, onNodeSelect]);
+  }, [activeNodeId, chatNodes, selectedChildIndices, onNodeSelect]);
 
   const handleSendMessage = async () => {
     if (!message.trim() || isLoading) return;
@@ -135,18 +118,13 @@ export function ChatPaneV2({
     setButtonLoading(buttonId);
     try {
       await navigator.clipboard.writeText(text);
-      toast.success('Copied to clipboard');
-      setTimeout(() => setButtonLoading(null), 1000);
+      toastSuccess('Message copied to clipboard');
     } catch (err) {
-      console.error('Failed to copy text: ', err);
-      toast.error('Failed to copy text');
+      console.error('Failed to copy text:', err);
+      toastError('Failed to copy message');
+    } finally {
       setButtonLoading(null);
     }
-  };
-
-  const handleEdit = (nodeId: string, text: string) => {
-    setEditingNodeId(nodeId);
-    setEditingText(text);
   };
 
   const handleSaveEdit = async () => {
@@ -156,10 +134,9 @@ export function ChatPaneV2({
       await onEditNode(editingNodeId, editingText);
       setEditingNodeId(null);
       setEditingText('');
-      setEditingNodeId(editingNodeId);
     } catch (err) {
       console.error('Failed to edit node:', err);
-      toast.error('Failed to update message');
+      toastError('Failed to update message');
     }
   };
 
@@ -169,34 +146,36 @@ export function ChatPaneV2({
   };
 
   const handleDelete = (nodeId: string, nodeText: string) => {
-    setDeleteConfirm({ nodeId, nodeText });
+    if (buttonLoading) return; // Prevent double triggers
+    setDeleteConfirm({ nodeId, content: nodeText });
   };
 
   const confirmDelete = async () => {
-    if (!deleteConfirm || !onDeleteNode) return;
+    if (!deleteConfirm || !onDeleteNode || buttonLoading) return;
 
+    setButtonLoading(`delete_${deleteConfirm.nodeId}`);
     try {
       await onDeleteNode(deleteConfirm.nodeId);
-      toast.success('Message deleted');
+      setDeleteConfirm(null);
+      toastSuccess('Message deleted');
     } catch (err) {
       console.error('Failed to delete node:', err);
-      toast.error('Failed to delete message');
+      toastError('Failed to delete message');
     } finally {
-      setDeleteConfirm(null);
+      setButtonLoading(null);
     }
   };
 
-  // Get children for a node from the graph structure
-  const getNodeChildren = (nodeId: string): string[] => {
-    const node = chatNodeMap.get(nodeId);
-    if (!node) return [];
+  const getNodeChildren = useCallback(
+    (nodeId: string): string[] => {
+      return chatNodes.filter(n => n.parentId === nodeId).map(n => n.id);
+    },
+    [chatNodes]
+  );
 
-    // Find all nodes that have this node as parent
-    return chatNodes.filter(n => n.parentId === nodeId).map(n => n.id);
-  };
-
-  // Handle Try Again functionality - generate alternative response
   const handleTryAgain = async (nodeId: string) => {
+    if (buttonLoading) return; // Prevent double triggers
+
     const node = chatNodeMap.get(nodeId);
     if (!node || !node.parentId) return;
 
@@ -205,10 +184,10 @@ export function ChatPaneV2({
 
     setButtonLoading(`try_again_${nodeId}`);
     try {
-      // Generate alternative response by requesting AI reply for the parent node
       await onRequestAIReply(node.parentId);
     } catch (error) {
-      console.error('Failed to generate alternative response:', error);
+      console.error('Failed to try again:', error);
+      toastError('Failed to generate new response');
     } finally {
       setButtonLoading(null);
     }
@@ -264,68 +243,149 @@ export function ChatPaneV2({
                   </button>
                 </div>
               </div>
-            ) : (
+            ) : isUser ? (
               content
+            ) : (
+              <div className="markdown-content prose prose-sm max-w-none prose-headings:text-gray-900 prose-p:text-gray-800 prose-code:text-blue-600 prose-code:bg-blue-50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-gray-900 prose-pre:text-gray-100">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeHighlight]}
+                >
+                  {content}
+                </ReactMarkdown>
+              </div>
             )}
           </div>
 
           {/* Action buttons */}
-          <div className="absolute -bottom-8 left-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50">
-            <div className="flex space-x-1 bg-white rounded-lg shadow-lg border p-1">
+          <div className="relative group">
+            <div className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 transition-opacity flex space-x-1 z-10 bg-white rounded shadow-md p-1 border border-gray-200">
               <button
-                onClick={() => handleCopy(content, `copy-${nodeId}`)}
-                className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-50"
-                disabled={buttonLoading === `copy-${nodeId}`}
-                title="Copy"
+                onClick={() => handleCopy(content, `copy_assistant_${nodeId}`)}
+                disabled={buttonLoading === `copy_assistant_${nodeId}`}
+                className="p-1 hover:bg-gray-50 transition-colors"
+                title="Copy response"
               >
-                <Copy className="w-3.5 h-3.5 text-gray-600" />
+                {buttonLoading === `copy_assistant_${nodeId}` ? (
+                  <div className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <MessageSquare className="w-3 h-3 text-gray-600" />
+                )}
               </button>
+              <button
+                onClick={() => handleTryAgain(targetNodeId)}
+                disabled={buttonLoading !== null}
+                className="p-1 hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Try Again"
+              >
+                {buttonLoading === `try_again_${targetNodeId}` ? (
+                  <div className="w-3 h-3 border border-blue-400 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <MoreHorizontal className="w-3 h-3 text-blue-600" />
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
-              {!isUser && (
-                <>
-                  <button
-                    className="p-1.5 rounded hover:bg-gray-100"
-                    title="Good response"
-                  >
-                    <ThumbsUp className="w-3.5 h-3.5 text-gray-600" />
-                  </button>
-                  <button
-                    className="p-1.5 rounded hover:bg-gray-100"
-                    title="Bad response"
-                  >
-                    <ThumbsDown className="w-3.5 h-3.5 text-gray-600" />
-                  </button>
-                  <button
-                    onClick={() => handleTryAgain(nodeId)}
-                    className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-50"
-                    disabled={buttonLoading === `try_again_${nodeId}`}
-                    title="Try again"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5 text-gray-600" />
-                  </button>
-                </>
-              )}
+  const renderChatMessageUser = (
+    content: string,
+    isUser: boolean,
+    nodeId: string,
+    isEditing: boolean = false
+  ) => {
+    const targetNodeId = nodeId.replace('_assistant', '');
+    const isActive = targetNodeId === activeNodeId;
 
-              {isUser && (
-                <>
+    return (
+      <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+        <div
+          className={`max-w-[80%] p-3 rounded-lg relative group cursor-pointer transition-all duration-300 transform ${
+            isUser
+              ? isActive
+                ? 'bg-blue-600 text-white ring-2 ring-blue-400 shadow-lg scale-105'
+                : 'bg-blue-500 text-white hover:bg-blue-600 hover:shadow-md hover:scale-102'
+              : isActive
+                ? 'bg-blue-50 text-gray-900 ring-2 ring-blue-400 shadow-lg scale-105 border-l-4 border-blue-500'
+                : 'bg-gray-100 text-gray-900 hover:bg-gray-200 hover:shadow-md hover:scale-102'
+          }`}
+          onClick={() => {
+            onNodeSelect?.(targetNodeId);
+          }}
+        >
+          <div className="whitespace-pre-wrap">
+            {isEditing ? (
+              <div className="space-y-2">
+                <textarea
+                  value={editingText}
+                  onChange={e => setEditingText(e.target.value)}
+                  className="w-full p-2 border rounded resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  rows={3}
+                  autoFocus
+                />
+                <div className="flex space-x-2">
                   <button
-                    onClick={() => handleEdit(nodeId, content)}
-                    className="p-1.5 rounded hover:bg-gray-100"
-                    title="Edit message"
+                    onClick={handleSaveEdit}
+                    className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
                   >
-                    <Edit2 className="w-3.5 h-3.5 text-gray-600" />
+                    Save
                   </button>
-                  {onDeleteNode && (
-                    <button
-                      onClick={() => handleDelete(nodeId, content)}
-                      className="p-1.5 rounded hover:bg-red-100"
-                      title="Delete message and all responses"
-                    >
-                      <Trash2 className="w-3.5 h-3.5 text-red-600" />
-                    </button>
-                  )}
-                </>
-              )}
+                  <button
+                    onClick={cancelEdit}
+                    className="px-3 py-1 bg-gray-300 text-gray-700 rounded text-sm hover:bg-gray-400"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : isUser ? (
+              content
+            ) : (
+              <div className="markdown-content prose prose-sm max-w-none prose-headings:text-gray-900 prose-p:text-gray-800 prose-code:text-blue-600 prose-code:bg-blue-50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-gray-900 prose-pre:text-gray-100">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeHighlight]}
+                >
+                  {content}
+                </ReactMarkdown>
+              </div>
+            )}
+          </div>
+
+          {/* Action buttons */}
+          <div className="relative group">
+            <div className="absolute -top-2 -left-2 opacity-0 group-hover:opacity-100 transition-opacity flex space-x-1 z-20 bg-white rounded shadow-md p-1 border border-gray-200">
+              <button
+                onClick={() => handleCopy(content, `copy_user_${nodeId}`)}
+                disabled={buttonLoading === `copy_user_${nodeId}`}
+                className="p-1 hover:bg-gray-50 transition-colors"
+                title="Copy message"
+              >
+                {buttonLoading === `copy_user_${nodeId}` ? (
+                  <div className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <MessageSquare className="w-3 h-3 text-gray-600" />
+                )}
+              </button>
+              <button
+                onClick={() => setBranchingFromNode(nodeId)}
+                disabled={buttonLoading !== null}
+                className="p-1 hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Branch from here"
+              >
+                <MoreHorizontal className="w-3 h-3 text-blue-600" />
+              </button>
+              <button
+                onClick={() => handleDelete(nodeId, content)}
+                disabled={buttonLoading !== null}
+                className="p-1 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Delete message"
+              >
+                <Trash2 className="w-3 h-3 text-red-600" />
+              </button>
             </div>
           </div>
         </div>
@@ -334,84 +394,17 @@ export function ChatPaneV2({
   };
 
   const renderBranchingUI = (chatNode: ChatNodeT, isLastNode: boolean) => {
-    const children = getNodeChildren(chatNode.id);
-    if (!isLastNode || children.length <= 1) return null;
-
-    const currentChildIndex = selectedChildIndex[chatNode.id] || 0;
-    const selectedChildId = children[currentChildIndex];
-    const selectedChild = chatNodeMap.get(selectedChildId);
-
-    return (
-      <div className="mt-4 space-y-2">
-        <div className="text-sm font-semibold text-center">
-          {currentChildIndex + 1}/{children.length} responses
-        </div>
-
-        <div className="flex items-center justify-between gap-2 border-2 border-dotted border-gray-300 rounded-lg p-4 hover:bg-accent/50 cursor-pointer">
-          {currentChildIndex > 0 && (
-            <button
-              onClick={() =>
-                setSelectedChildIndex(prev => ({
-                  ...prev,
-                  [chatNode.id]: currentChildIndex - 1,
-                }))
-              }
-              className="p-2 hover:bg-accent rounded-full transition-colors"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-          )}
-
-          <div className="flex-1 text-center">
-            {selectedChild && (
-              <div className="space-y-2">
-                <div className="text-sm text-gray-600">
-                  <strong>U:</strong> {selectedChild.query.slice(0, 50)}...
-                </div>
-                <div className="text-sm text-gray-600">
-                  <strong>A:</strong> {selectedChild.response.slice(0, 50)}...
-                </div>
-              </div>
-            )}
-          </div>
-
-          {currentChildIndex < children.length - 1 && (
-            <button
-              onClick={() =>
-                setSelectedChildIndex(prev => ({
-                  ...prev,
-                  [chatNode.id]: currentChildIndex + 1,
-                }))
-              }
-              className="p-2 hover:bg-accent rounded-full transition-colors"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-
-        {/* Try Again button for generating alternative responses */}
-        <div className="flex justify-center mt-2">
-          <button
-            onClick={() => handleTryAgain(chatNode.id)}
-            disabled={buttonLoading === `try_again_${chatNode.id}`}
-            className="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full transition-colors disabled:opacity-50 flex items-center space-x-1"
-          >
-            <RotateCcw className="w-3 h-3" />
-            <span>Try Again</span>
-          </button>
-        </div>
-      </div>
-    );
+    // Try Again button moved to hover toolbar on assistant nodes
+    return null;
   };
 
   return (
     <div className={`flex flex-col ${className}`}>
       {/* Chat Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 space-y-6 relative">
         <AnimatePresence mode="wait">
-          {activePath.map((chatNode, index) => {
-            const isLastNode = index === activePath.length - 1;
+          {chatNodes.map((chatNode, index) => {
+            const isLastNode = index === chatNodes.length - 1;
             return (
               <motion.div
                 key={chatNode.id}
@@ -419,10 +412,10 @@ export function ChatPaneV2({
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.2, delay: index * 0.05 }}
-                className="space-y-4"
+                className="space-y-6"
               >
                 {/* User message */}
-                {renderChatMessage(
+                {renderChatMessageUser(
                   chatNode.query,
                   true,
                   chatNode.id,
@@ -430,37 +423,37 @@ export function ChatPaneV2({
                 )}
 
                 {/* Assistant response with streaming effect */}
-                {isLastNode && !chatNode.response && isLoading ? (
-                  <div className="flex justify-start">
-                    <div className="max-w-[80%] p-3 rounded-lg bg-gray-100 text-gray-800">
-                      <div className="flex items-center space-x-2">
-                        <div className="flex space-x-1">
-                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                          <div
-                            className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                            style={{ animationDelay: '0.1s' }}
-                          ></div>
-                          <div
-                            className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                            style={{ animationDelay: '0.2s' }}
-                          ></div>
-                        </div>
-                        <span className="text-sm text-gray-600">
-                          Thinking...
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
+                {chatNode.response ? (
                   renderChatMessage(
                     chatNode.response,
                     false,
                     `${chatNode.id}_assistant`,
                     false
                   )
-                )}
+                ) : isLastNode && isLoading ? (
+                  <div className="flex justify-start mb-4">
+                    <div className="max-w-[80%] p-4 rounded-lg bg-gray-100 text-gray-800 border-l-4 border-blue-500">
+                      <div className="flex items-center space-x-3">
+                        <div className="flex space-x-1">
+                          <div className="w-2.5 h-2.5 bg-blue-500 rounded-full animate-bounce"></div>
+                          <div
+                            className="w-2.5 h-2.5 bg-blue-500 rounded-full animate-bounce"
+                            style={{ animationDelay: '0.15s' }}
+                          ></div>
+                          <div
+                            className="w-2.5 h-2.5 bg-blue-500 rounded-full animate-bounce"
+                            style={{ animationDelay: '0.3s' }}
+                          ></div>
+                        </div>
+                        <span className="text-sm font-medium text-gray-700">
+                          AI is generating response...
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
 
-                {/* Branching UI for multiple responses */}
+                {/* Branching UI */}
                 {renderBranchingUI(chatNode, isLastNode)}
               </motion.div>
             );
@@ -496,8 +489,7 @@ export function ChatPaneV2({
         )}
       </div>
 
-      {/* Toast Container */}
-      <toast.ToastContainer />
+      <div ref={messagesEndRef} />
 
       {/* Input area */}
       <div className="border-t p-4">
@@ -545,12 +537,9 @@ export function ChatPaneV2({
         </div>
       </div>
 
-      {/* Toast Container */}
-      <toast.ToastContainer />
-
       {/* Delete Confirmation Dialog */}
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-gray-900/80 bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
             <h3 className="text-lg font-semibold mb-4">Delete Message</h3>
             <p className="text-gray-600 mb-4">
@@ -558,7 +547,7 @@ export function ChatPaneV2({
               responses?
             </p>
             <div className="text-sm text-gray-500 mb-4 p-2 bg-gray-50 rounded">
-              &quot;{deleteConfirm.nodeText.slice(0, 100)}...&quot;
+              {deleteConfirm.content.slice(0, 50)}...&quot;
             </div>
             <div className="flex justify-end space-x-2">
               <button

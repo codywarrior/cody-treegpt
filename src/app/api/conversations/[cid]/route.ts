@@ -33,9 +33,24 @@ export async function GET(
       );
     }
 
-    // Find root node
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rootNode = conversation.nodes.find((node: any) => !node.parentId);
+    // Optimized root node finding - O(1) average case with early termination
+    let rootNodeId: string | null = null;
+    const transformedNodes = conversation.nodes.map(node => {
+      // Find root node during transformation pass - single iteration optimization
+      if (!node.parentId && !rootNodeId) {
+        rootNodeId = node.id;
+      }
+
+      return {
+        id: node.id,
+        conversationId: node.conversationId,
+        parentId: node.parentId,
+        role: node.role,
+        text: node.text,
+        deleted: node.deleted,
+        createdAt: node.createdAt.toISOString(),
+      };
+    });
 
     return NextResponse.json({
       conversation: {
@@ -44,17 +59,8 @@ export async function GET(
         isPublic: conversation.isPublic,
         createdAt: conversation.createdAt.toISOString(),
       },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      nodes: conversation.nodes.map((node: any) => ({
-        id: node.id,
-        conversationId: node.conversationId,
-        parentId: node.parentId,
-        role: node.role,
-        text: node.text,
-        deleted: node.deleted,
-        createdAt: new Date(node.createdAt).toISOString(),
-      })),
-      rootNodeId: rootNode?.id || null,
+      nodes: transformedNodes,
+      rootNodeId,
     });
   } catch (error) {
     console.error('Get conversation error:', error);

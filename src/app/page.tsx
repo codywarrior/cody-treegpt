@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, MessageSquare, Edit2, Trash2 } from 'lucide-react';
 import { Tooltip } from '@/components/Tooltip';
@@ -25,15 +25,7 @@ export default function Home() {
   const toast = useToast();
   const router = useRouter();
 
-  useEffect(() => {
-    const init = async () => {
-      await checkAuth();
-      await loadConversations();
-    };
-    init();
-  }, [router]);
-
-  const checkAuth = async () => {
+  const checkAuth = useCallback(async () => {
     try {
       const response = await fetch('/api/me');
       if (response.ok) {
@@ -47,9 +39,9 @@ export default function Home() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [router]);
 
-  const loadConversations = async () => {
+  const loadConversations = useCallback(async () => {
     try {
       const response = await fetch('/api/conversations');
       if (response.ok) {
@@ -59,7 +51,15 @@ export default function Home() {
     } catch (error) {
       console.error('Failed to load conversations:', error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const init = async () => {
+      await checkAuth();
+      await loadConversations();
+    };
+    init();
+  }, [checkAuth, loadConversations]);
 
   const createConversation = async () => {
     if (!newTitle.trim()) return;
@@ -105,7 +105,7 @@ export default function Home() {
   const updateConversationTitle = async (id: string, title: string) => {
     try {
       const response = await fetch(`/api/conversations/${id}`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title }),
       });

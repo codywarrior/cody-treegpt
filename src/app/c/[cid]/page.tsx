@@ -1,18 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 
 import { ChatPaneV2 } from '@/components/ChatPaneV2';
 import Graph from '@/components/Graph';
-// Tree algorithms imported for future LCA animation implementation
-import { ConversationT, NodeT, ChatNodeT } from '@/lib/types';
+import ShareModal from '@/components/ShareModal';
 import {
   convertNodesToChatNodes,
   getChatActivePath,
   createNewChatNode,
-  updateChatNodeResponse,
 } from '@/lib/chat-utils';
+import { NodeT, ChatNodeT, ConversationT } from '@/lib/types';
 
 export default function ConversationPage() {
   const params = useParams();
@@ -21,27 +20,37 @@ export default function ConversationPage() {
 
   const [conversation, setConversation] = useState<ConversationT | null>(null);
   const [nodes, setNodes] = useState<NodeT[]>([]);
-  const [chatNodes, setChatNodes] = useState<ChatNodeT[]>([]);
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [shareModal, setShareModal] = useState<{
+    isOpen: boolean;
+    url: string;
+  }>({
+    isOpen: false,
+    url: '',
+  });
+  const [importModal, setImportModal] = useState<{
+    isOpen: boolean;
+    file: File | null;
+  }>({ isOpen: false, file: null });
 
-  useEffect(() => {
-    if (cid) {
-      loadConversation();
-    }
-  }, [cid, router]);
+  // Memoize expensive computations
+  const chatNodes = useMemo(() => convertNodesToChatNodes(nodes), [nodes]);
+  const activePath = useMemo(
+    () => getChatActivePath(chatNodes, activeNodeId),
+    []
+  );
 
-  const loadConversation = async () => {
+  const loadConversation = useCallback(async () => {
     try {
       const response = await fetch(`/api/conversations/${cid}`);
       if (response.ok) {
         const data = await response.json();
         setConversation(data.conversation);
         setNodes(data.nodes);
-        const convertedChatNodes = convertNodesToChatNodes(data.nodes);
-        setChatNodes(convertedChatNodes);
 
         // Set active node to the last node in the conversation for initial display
+        const convertedChatNodes = convertNodesToChatNodes(data.nodes);
         const lastNode =
           convertedChatNodes.length > 0
             ? convertedChatNodes[convertedChatNodes.length - 1]
@@ -56,7 +65,11 @@ export default function ConversationPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [cid, router]);
+
+  useEffect(() => {
+    loadConversation();
+  }, [loadConversation]);
 
   const handleSendMessage = async (text: string, parentId: string | null) => {
     try {
@@ -79,13 +92,14 @@ export default function ConversationPage() {
         const data = await response.json();
         const userNode = data.node;
 
-        // Add to chat nodes and nodes state
-        setChatNodes(prev => [...prev, newChatNode]);
+        // Add to nodes state (chatNodes will update via useMemo)
         setNodes(prev => [...prev, userNode]);
-        setActiveNodeId(newChatNode.id);
+        setActiveNodeId(userNode.id);
 
         // Pass the chat node directly to avoid timing issues
         handleRequestAIReply(userNode.id, newChatNode);
+      } else {
+        throw new Error(`Failed to create node: ${response.status}`);
       }
     } catch (error) {
       console.error('Failed to send message:', error);
@@ -94,6 +108,9 @@ export default function ConversationPage() {
 
   const handleBranchFromNode = async (nodeId: string, text: string) => {
     try {
+      // Create new chat node for branching
+      const newChatNode = createNewChatNode(text, nodeId, cid);
+
       const response = await fetch('/api/nodes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -108,8 +125,13 @@ export default function ConversationPage() {
       if (response.ok) {
         const data = await response.json();
         const newNode = data.node;
+
+        // Update nodes state (chatNodes will update via useMemo)
         setNodes(prev => [...prev, newNode]);
         setActiveNodeId(newNode.id);
+
+        // Request AI reply for the branch
+        handleRequestAIReply(newNode.id, newChatNode);
       }
     } catch (error) {
       console.error('Failed to create branch:', error);
@@ -125,9 +147,17 @@ export default function ConversationPage() {
       let targetChatNode = chatNode;
       if (!targetChatNode) {
         const userNode = nodes.find(n => n.id === userNodeId);
-        targetChatNode = chatNodes.find(cn => cn.query === userNode?.text);
+        if (!userNode) {
+          console.error('Could not find user node with ID:', userNodeId);
+          return;
+        }
+        // Find chat node by matching the user node ID directly
+        targetChatNode = chatNodes.find(cn => cn.id === userNodeId);
         if (!targetChatNode) {
-          console.error('Could not find corresponding chat node');
+          console.error(
+            'Could not find corresponding chat node for user node:',
+            userNodeId
+          );
           return;
         }
       }
@@ -160,45 +190,29 @@ export default function ConversationPage() {
 
                 if (data.type === 'node') {
                   aiNode = data.node;
-                  setNodes(prev => [...prev, aiNode!]);
+                  setNodes(prev => {
+                    const updated = [...prev, aiNode!];
+                    return updated;
+                  });
                 } else if (data.type === 'content' && aiNode) {
                   streamingText += data.content;
-                  // Update chat node response
-                  setChatNodes(prev =>
-                    prev.map(cn =>
-                      cn.id === targetChatNode!.id
-                        ? updateChatNodeResponse(cn, streamingText)
-                        : cn
+                  const aiNodeId = aiNode.id;
+                  setNodes(prev =>
+                    prev.map(node =>
+                      node.id === aiNodeId
+                        ? { ...node, text: streamingText }
+                        : node
                     )
                   );
-                  // Update nodes array
-                  if (aiNode) {
-                    const aiNodeId = aiNode.id;
-                    setNodes(prev =>
-                      prev.map(node =>
-                        node.id === aiNodeId
-                          ? { ...node, text: streamingText }
-                          : node
-                      )
-                    );
-                  }
                 } else if (data.type === 'complete' && aiNode) {
-                  // Final update
-                  setChatNodes(prev =>
-                    prev.map(cn =>
-                      cn.id === targetChatNode!.id
-                        ? updateChatNodeResponse(cn, data.node.text)
-                        : cn
+                  const aiNodeId = aiNode.id;
+                  setNodes(prev =>
+                    prev.map(node =>
+                      node.id === aiNodeId
+                        ? { ...node, text: data.node.text }
+                        : node
                     )
                   );
-                  if (aiNode) {
-                    const aiNodeId = aiNode.id;
-                    setNodes(prev =>
-                      prev.map(node =>
-                        node.id === aiNodeId ? data.node : node
-                      )
-                    );
-                  }
                 } else if (data.type === 'error') {
                   console.error('Streaming error:', data.error);
                 }
@@ -224,8 +238,11 @@ export default function ConversationPage() {
       });
 
       if (response.ok) {
-        // Update local state immediately by filtering out the deleted node
-        const updatedNodes = nodes.filter(n => n.id !== nodeId);
+        const result = await response.json();
+
+        // Update local state by filtering out all deleted nodes
+        const deletedIds = new Set(result.deletedIds || [nodeId]);
+        const updatedNodes = nodes.filter(n => !deletedIds.has(n.id));
         setNodes(updatedNodes);
 
         // Reset active node if the deleted node was active
@@ -239,11 +256,12 @@ export default function ConversationPage() {
             setActiveNodeId(parentNode.id);
           } else if (updatedNodes.length > 0) {
             setActiveNodeId(updatedNodes[0].id);
+          } else {
+            setActiveNodeId(null);
           }
         }
-
-        // Reload conversation in background to ensure consistency
-        loadConversation();
+      } else {
+        console.error('Delete failed:', response.status, response.statusText);
       }
     } catch (error) {
       console.error('Failed to delete node:', error);
@@ -270,16 +288,7 @@ export default function ConversationPage() {
       }
     } catch (error) {
       console.error('Failed to edit node:', error);
-      throw error; // Re-throw to let ChatPane handle the error
     }
-  };
-
-  const handleGraphNodeClick = (nodeId: string) => {
-    if (activeNodeId === nodeId) return;
-
-    // For now, just switch immediately
-    // TODO: Implement LCA-based animation
-    setActiveNodeId(nodeId);
   };
 
   if (isLoading) {
@@ -301,7 +310,7 @@ export default function ConversationPage() {
             onClick={() => router.push('/')}
             className="text-blue-600 hover:text-blue-500"
           >
-            Return to home
+            ← Back
           </button>
         </div>
       </div>
@@ -309,9 +318,9 @@ export default function ConversationPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
+    <div className="min-h-screen flex flex-col bg-gray-50">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
+      <div className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <button
@@ -325,27 +334,74 @@ export default function ConversationPage() {
             </h1>
           </div>
           <div className="flex items-center space-x-4 text-sm text-gray-500">
-            <div>{chatNodes.length} conversations</div>
-            {activeNodeId && (
-              <div className="flex items-center space-x-1">
-                <span>•</span>
-                <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">
-                  {(() => {
-                    const activePath = getChatActivePath(
-                      chatNodes,
-                      activeNodeId
+            <div>{chatNodes.length} nodes</div>
+
+            <div className="flex items-center space-x-2">
+              <input
+                type="file"
+                accept=".json"
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    setImportModal({ isOpen: true, file });
+                  }
+                }}
+                className="hidden"
+                id="import-file"
+              />
+              <label
+                htmlFor="import-file"
+                className="px-3 py-1 bg-purple-500 text-white rounded text-xs hover:bg-purple-600 cursor-pointer"
+              >
+                Import
+              </label>
+              <button
+                onClick={async () => {
+                  try {
+                    const response = await fetch(
+                      `/api/export/${conversation.id}`
                     );
-                    const pathLabels = activePath.map(() => 'U→A');
-                    return pathLabels.length > 3
-                      ? `...${pathLabels.slice(-3).join('→')}`
-                      : pathLabels.join('→');
-                  })()}
-                </span>
-              </div>
-            )}
+                    const blob = await response.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${conversation.title}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  } catch (error) {
+                    console.error('Export failed:', error);
+                  }
+                }}
+                className="px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
+              >
+                Export
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    const response = await fetch('/api/share', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        conversationId: conversation.id,
+                        nodeId: activeNodeId,
+                        activePathOnly: true,
+                      }),
+                    });
+                    const { url } = await response.json();
+                    setShareModal({ isOpen: true, url });
+                  } catch (error) {
+                    console.error('Share failed:', error);
+                  }
+                }}
+                className="px-3 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600"
+              >
+                Share
+              </button>
+            </div>
           </div>
         </div>
-      </header>
+      </div>
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
@@ -356,34 +412,127 @@ export default function ConversationPage() {
             activeNodeId={activeNodeId}
             onSendMessage={handleSendMessage}
             onBranchFromNode={handleBranchFromNode}
-            onRequestAIReply={handleRequestAIReply}
-            onDeleteNode={handleDeleteNode}
+            onNodeSelect={nodeId => {
+              // Keep the ChatPane display as-is, just update active node for graph highlighting
+              setActiveNodeId(nodeId);
+            }}
             onEditNode={handleEditNode}
-            onNodeSelect={setActiveNodeId}
+            onDeleteNode={handleDeleteNode}
+            onRequestAIReply={handleRequestAIReply}
             className="h-full"
           />
         </div>
 
         {/* Graph Pane */}
         <div className="w-1/2">
-          <div className="h-full flex flex-col">
-            <div className="p-4 border-b border-gray-200 bg-gray-50">
-              <h2 className="text-lg font-semibold text-gray-900">
-                Conversation Tree
-              </h2>
-              <p className="text-sm text-gray-600">
-                Visual representation of your branching conversation
-              </p>
-            </div>
-            <Graph
-              nodes={nodes}
-              activeNodeId={activeNodeId}
-              onNodeClick={handleGraphNodeClick}
-              className="flex-1"
-            />
-          </div>
+          <Graph
+            nodes={nodes}
+            activeNodeId={activeNodeId}
+            onNodeClick={nodeId => {
+              setActiveNodeId(nodeId);
+            }}
+            className="h-full w-full"
+          />
         </div>
       </div>
+
+      {/* Share Modal */}
+      <ShareModal
+        isOpen={shareModal.isOpen}
+        onClose={() => setShareModal({ isOpen: false, url: '' })}
+        shareUrl={shareModal.url}
+        conversationTitle={conversation?.title || 'Untitled Conversation'}
+      />
+
+      {/* Import Confirmation Modal */}
+      {importModal.isOpen && (
+        <div className="fixed inset-0 bg-gray-900 bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold mb-4">Import Conversation</h3>
+            <p className="text-gray-600 mb-6">
+              How would you like to import this conversation?
+            </p>
+            <div className="space-y-3 mb-6">
+              <button
+                onClick={async () => {
+                  if (!importModal.file) return;
+
+                  try {
+                    const formData = new FormData();
+                    formData.append('file', importModal.file);
+                    formData.append('conversationId', conversation.id);
+
+                    const response = await fetch('/api/import', {
+                      method: 'POST',
+                      body: formData,
+                    });
+
+                    if (response.ok) {
+                      setImportModal({ isOpen: false, file: null });
+                      window.location.reload();
+                    } else {
+                      alert('Import failed');
+                    }
+                  } catch (error) {
+                    console.error('Import failed:', error);
+                    alert('Import failed');
+                  }
+                }}
+                className="w-full p-3 text-left bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors"
+              >
+                <div className="font-medium text-blue-900">
+                  Add to Current Conversation
+                </div>
+                <div className="text-sm text-blue-700">
+                  Import nodes into this conversation
+                </div>
+              </button>
+              <button
+                onClick={async () => {
+                  if (!importModal.file) return;
+
+                  try {
+                    const formData = new FormData();
+                    formData.append('file', importModal.file);
+
+                    const response = await fetch('/api/import', {
+                      method: 'POST',
+                      body: formData,
+                    });
+
+                    if (response.ok) {
+                      const result = await response.json();
+                      setImportModal({ isOpen: false, file: null });
+                      router.push(`/c/${result.conversationId}`);
+                    } else {
+                      alert('Import failed');
+                    }
+                  } catch (error) {
+                    console.error('Import failed:', error);
+                    alert('Import failed');
+                  }
+                }}
+                className="w-full p-3 text-left bg-green-50 hover:bg-green-100 rounded-lg border border-green-200 transition-colors"
+              >
+                <div className="font-medium text-green-900">
+                  Create New Conversation
+                </div>
+                <div className="text-sm text-green-700">
+                  Import as a separate conversation
+                </div>
+              </button>
+            </div>
+            <div className="flex justify-end space-x-2">
+              <button
+                onClick={() => setImportModal({ isOpen: false, file: null })}
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import OpenAI from 'openai';
 import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth';
 import { getActivePath } from '@/lib/tree-algorithms';
+import { buildAIContext, aiRateLimiter } from '@/lib/ai-context';
 
 // OpenAI client will be instantiated in the handler to avoid build-time errors
 
@@ -18,6 +19,20 @@ export async function POST(
     }
     const user = session.user;
     const { nodeId } = await params;
+
+    // Rate limiting
+    const clientIP =
+      request.headers.get('x-forwarded-for') ||
+      request.headers.get('x-real-ip') ||
+      'unknown';
+    const rateLimitKey = `${user.id}:${clientIP}`;
+
+    if (!aiRateLimiter.isAllowed(rateLimitKey)) {
+      return NextResponse.json(
+        { error: 'Rate limit exceeded. Please try again later.' },
+        { status: 429 }
+      );
+    }
 
     // Get the node and verify it belongs to user's conversation
     const node = await prisma.node.findUnique({
@@ -46,43 +61,38 @@ export async function POST(
 
     const activePath = getActivePath(nodeId, nodesById);
 
-    // Build conversation context from the active path
-    const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-      {
-        role: 'system',
-        content:
-          'You are a helpful AI assistant in a branching conversation tree. Provide thoughtful, contextual responses based on the conversation path.',
-      },
-    ];
-
-    // Add messages from the active path
-    for (const pathNode of activePath) {
-      if (pathNode.role === 'user') {
-        messages.push({
-          role: 'user',
-          content: pathNode.text,
-        });
-      } else if (pathNode.role === 'assistant') {
-        messages.push({
-          role: 'assistant',
-          content: pathNode.text,
-        });
-      }
-    }
+    // Build path-aware context with proper token management
+    const { messages } = buildAIContext(activePath, 7000, 6);
 
     // Create OpenAI client
     const openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
     });
 
-    // Generate AI response
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
-      messages,
-      max_tokens: 500,
-      temperature: 0.7,
-      stream: true,
-    });
+    // Generate AI response with proper model and timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
+
+    let completion;
+    try {
+      completion = await openai.chat.completions.create(
+        {
+          model: 'gpt-4o-mini',
+          messages:
+            messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+          max_tokens: 500,
+          temperature: 0.7,
+          stream: true,
+        },
+        {
+          signal: controller.signal,
+        }
+      );
+      clearTimeout(timeoutId);
+    } catch (error) {
+      clearTimeout(timeoutId);
+      throw error;
+    }
 
     // Create AI reply node with placeholder text
     const aiNode = await prisma.node.create({

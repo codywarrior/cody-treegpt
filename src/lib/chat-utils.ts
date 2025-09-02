@@ -20,7 +20,7 @@ export function convertNodesToChatNodes(nodes: NodeT[]): ChatNodeT[] {
     if (assistantNode) {
       // Create chat node from user-assistant pair
       const chatNode: ChatNodeT = {
-        id: assistantNode.id, // Use assistant ID as the chat node ID
+        id: userNode.id, // Use user node ID as the chat node ID for consistency
         query: userNode.text,
         response: assistantNode.text,
         assistantText: assistantNode.text,
@@ -28,6 +28,20 @@ export function convertNodesToChatNodes(nodes: NodeT[]): ChatNodeT[] {
         children: [], // Will be populated later
         createdAt: assistantNode.createdAt,
         conversationId: assistantNode.conversationId,
+      };
+
+      chatNodes.push(chatNode);
+    } else {
+      // Create chat node for user message without response (pending AI reply)
+      const chatNode: ChatNodeT = {
+        id: userNode.id,
+        query: userNode.text,
+        response: '',
+        assistantText: '',
+        parentId: findChatParentId(userNode, nodeMap),
+        children: [],
+        createdAt: userNode.createdAt,
+        conversationId: userNode.conversationId,
       };
 
       chatNodes.push(chatNode);
@@ -54,17 +68,17 @@ function findChatParentId(
   const parentNode = nodeMap.get(userNode.parentId);
   if (!parentNode) return null;
 
-  // If parent is assistant, it should be a chat node
+  // If parent is assistant, find the user node that created it
   if (parentNode.role === 'assistant') {
+    return parentNode.parentId;
+  }
+
+  // If parent is user, it should be the chat node ID
+  if (parentNode.role === 'user') {
     return parentNode.id;
   }
 
-  // If parent is user, find its assistant response
-  const assistantResponse = Array.from(nodeMap.values()).find(
-    n => n.role === 'assistant' && n.parentId === parentNode.id
-  );
-
-  return assistantResponse?.id || null;
+  return null;
 }
 
 /**
