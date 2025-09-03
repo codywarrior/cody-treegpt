@@ -17,7 +17,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Download, Upload, FileText, Code } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-import { useExportConversation, useImportConversation } from '@/hooks/use-conversations';
+import {
+  useExportConversation,
+  useImportConversation,
+} from '@/hooks/use-conversations';
 
 interface ExportImportDialogProps {
   conversationId: string;
@@ -35,7 +38,7 @@ export function ExportImportDialog({
   const [importTitle, setImportTitle] = useState('');
   const { toast } = useToast();
   const router = useRouter();
-  
+
   const exportMutation = useExportConversation();
   const importMutation = useImportConversation();
 
@@ -59,16 +62,22 @@ export function ExportImportDialog({
     }
 
     importMutation.mutate(
-      { file: importFile },
+      { file: importFile, conversationId },
       {
-        onSuccess: (result) => {
+        onSuccess: result => {
           toast({
             title: 'Import successful',
             description: `Imported ${result.nodesImported} nodes`,
           });
-          // Navigate to the imported conversation
-          router.push(`/c/${result.conversationId}`);
+          // Close modal immediately
           setIsOpen(false);
+          // Reset form state
+          setImportFile(null);
+          setImportTitle('');
+          // Navigate to the imported conversation if it's a new one
+          if (result.conversationId !== conversationId) {
+            router.push(`/c/${result.conversationId}`);
+          }
         },
       }
     );

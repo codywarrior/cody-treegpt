@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     let conversation;
 
     if (conversationId) {
-      // Import into existing conversation
+      // Import into existing conversation - override existing tree structure
       conversation = await prisma.conversation.findFirst({
         where: {
           id: conversationId,
@@ -59,6 +59,13 @@ export async function POST(request: NextRequest) {
           { status: 404 }
         );
       }
+
+      // Delete all existing nodes to override the tree structure
+      await prisma.node.deleteMany({
+        where: {
+          conversationId: conversation.id,
+        },
+      });
     } else {
       // Create new conversation
       conversation = await prisma.conversation.create({

@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSignIn, useSignUp } from '@/hooks/use-conversations';
-import { useToast } from '@/components/Toast';
+import { useToast } from '@/components/ui/toast-provider';
+import Image from 'next/image';
 
 export default function SignInPage() {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -28,7 +29,7 @@ export default function SignInPage() {
         router.push('/');
         router.refresh();
       },
-      onError: (error) => {
+      onError: error => {
         toast.error(
           'Authentication Error',
           error instanceof Error ? error.message : 'Authentication failed'
@@ -41,17 +42,19 @@ export default function SignInPage() {
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-purple-50 via-blue-50 to-teal-50 dark:from-gray-900 dark:to-gray-800">
       {/* Background Logo */}
       <div className="absolute inset-0 flex items-center justify-center opacity-30 dark:opacity-20">
-        <img
+        <Image
           src="/GPTreeLogo.png"
           alt="GPTree Logo Background"
+          width={800}
+          height={600}
           className="w-9/10 h-9/10 object-contain"
         />
       </div>
-      
+
       {/* Auth Form */}
       <div className="relative z-10 max-w-md w-full space-y-8 p-8 bg-white/95 dark:bg-gray-800/95 backdrop-blur-md rounded-xl shadow-xl border border-white/30 dark:border-gray-700/50">
         <div className="text-center">
-       <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
             GPTree
           </h1>
           <h2 className="text-xl text-gray-600 dark:text-gray-300">
@@ -112,13 +115,16 @@ export default function SignInPage() {
             />
           </div>
 
-
           <button
             type="submit"
             disabled={signInMutation.isPending || signUpMutation.isPending}
             className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
           >
-            {(signInMutation.isPending || signUpMutation.isPending) ? 'Loading...' : isSignUp ? 'Sign Up' : 'Sign In'}
+            {signInMutation.isPending || signUpMutation.isPending
+              ? 'Loading...'
+              : isSignUp
+                ? 'Sign Up'
+                : 'Sign In'}
           </button>
 
           <div className="text-center">

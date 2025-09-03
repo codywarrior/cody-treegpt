@@ -1,21 +1,29 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Eye, EyeOff } from 'lucide-react';
-
-import ChatPaneV2 from '@/components/ChatPaneV2';
-import Graph from '@/components/Graph';
-import ShareModal from '@/components/ShareModal';
-import { useToast } from '@/components/Toast';
 import {
-  convertNodesToChatNodes,
-  getChatActivePath,
-  createNewChatNode,
-} from '@/lib/chat-utils';
-import { NodeT, ChatNodeT, ConversationT } from '@/lib/types';
-import { useConversationDetail, useExportConversation, useShareConversation, useImportConversation } from '@/hooks/use-conversations';
-import { useCreateNode, useEditNode, useDeleteNode, useGenerateAIReply } from '@/hooks/use-nodes';
+  Eye,
+  EyeOff,
+  ChevronLeft,
+  ChevronRight,
+  Upload,
+  Share2,
+  Download,
+} from 'lucide-react';
+
+import ChatPaneV2 from '@/components/chat/chat-pane';
+import Graph from '@/components/visualization/graph';
+import ShareModal from '@/components/share/share-modal';
+import { useToast } from '@/components/ui/toast-provider';
+import { convertNodesToChatNodes } from '@/lib/chat-utils';
+import {
+  useConversationDetail,
+  useExportConversation,
+  useShareConversation,
+  useImportConversation,
+} from '@/hooks/use-conversations';
+import { useCreateNode, useGenerateAIReply } from '@/hooks/use-nodes';
 
 export default function ConversationPage() {
   const params = useParams();
@@ -23,19 +31,21 @@ export default function ConversationPage() {
   const cid = params.cid as string;
 
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
-  
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+
   // TanStack Query hooks
   const { data: conversationData, isLoading } = useConversationDetail(cid);
   const createNodeMutation = useCreateNode();
-  const editNodeMutation = useEditNode();
-  const deleteNodeMutation = useDeleteNode();
   const generateAIReplyMutation = useGenerateAIReply();
   const exportConversationMutation = useExportConversation();
   const shareConversationMutation = useShareConversation();
   const importConversationMutation = useImportConversation();
-  
+
   const conversation = conversationData?.conversation || null;
-  const nodes = conversationData?.nodes || [];
+  const nodes = useMemo(
+    () => conversationData?.nodes ?? [],
+    [conversationData?.nodes]
+  );
   const [shareModal, setShareModal] = useState<{
     isOpen: boolean;
     url: string;
@@ -52,15 +62,13 @@ export default function ConversationPage() {
 
   // Memoize expensive computations
   const chatNodes = useMemo(() => convertNodesToChatNodes(nodes), [nodes]);
-  const activePath = useMemo(
-    () => getChatActivePath(chatNodes, activeNodeId),
-    [chatNodes, activeNodeId]
-  );
 
   // Set active node when conversation data loads
   useEffect(() => {
     if (conversationData && !activeNodeId) {
-      const convertedChatNodes = convertNodesToChatNodes(conversationData.nodes);
+      const convertedChatNodes = convertNodesToChatNodes(
+        conversationData.nodes
+      );
       const lastNode =
         convertedChatNodes.length > 0
           ? convertedChatNodes[convertedChatNodes.length - 1]
@@ -68,35 +76,6 @@ export default function ConversationPage() {
       setActiveNodeId(lastNode?.id || conversationData.rootNodeId);
     }
   }, [conversationData, activeNodeId]);
-
-  const handleSendMessage = async (text: string, parentId: string | null) => {
-    createNodeMutation.mutate(
-      {
-        conversationId: cid,
-        parentId,
-        role: 'user',
-        text,
-      },
-      {
-        onSuccess: (data) => {
-          const userNode = data.node;
-          setActiveNodeId(userNode.id);
-          // Automatically trigger AI reply
-          generateAIReplyMutation.mutate(userNode.id, {
-            onSuccess: (aiResponse) => {
-              // Update activeNodeId to the AI response node to show the full conversation
-              if (aiResponse.node) {
-                setActiveNodeId(aiResponse.node.id);
-              }
-            },
-          });
-        },
-        onError: (error) => {
-          toast.error('Failed to send message', error.message);
-        },
-      }
-    );
-  };
 
   const handleBranchFromNode = async (nodeId: string, text: string) => {
     createNodeMutation.mutate(
@@ -107,61 +86,22 @@ export default function ConversationPage() {
         text,
       },
       {
-        onSuccess: (data) => {
+        onSuccess: data => {
           const newNode = data.node;
           setActiveNodeId(newNode.id);
           // Automatically trigger AI reply
+          setIsGeneratingAI(true);
           generateAIReplyMutation.mutate(newNode.id, {
-            onSuccess: (aiResponse) => {
-              // Update activeNodeId to the AI response node to show the full conversation
-              if (aiResponse.node) {
-                setActiveNodeId(aiResponse.node.id);
-              }
+            onSuccess: () => {
+              setIsGeneratingAI(false);
+            },
+            onError: () => {
+              setIsGeneratingAI(false);
             },
           });
         },
-        onError: (error) => {
+        onError: error => {
           toast.error('Failed to create branch', error.message);
-        },
-      }
-    );
-  };
-
-
-  const handleDeleteNode = async (nodeId: string) => {
-    // Find the deleted node before deletion for active node logic
-    const deletedNode = nodes.find(n => n.id === nodeId);
-
-    deleteNodeMutation.mutate(nodeId, {
-      onSuccess: () => {
-        // Reset active node if the deleted node was active
-        if (deletedNode && activeNodeId === nodeId) {
-          // Find a suitable replacement node (parent or first available)
-          const parentNode = deletedNode.parentId
-            ? nodes.find(n => n.id === deletedNode.parentId)
-            : nodes.find(n => n.role === 'user');
-
-          if (parentNode) {
-            setActiveNodeId(parentNode.id);
-          } else if (nodes.length > 1) {
-            setActiveNodeId(nodes[0].id);
-          } else {
-            setActiveNodeId(null);
-          }
-        }
-      },
-      onError: (error) => {
-        toast.error('Failed to delete node', (error as Error).message);
-      },
-    });
-  };
-
-  const handleEditNode = async (nodeId: string, newText: string) => {
-    editNodeMutation.mutate(
-      { nodeId, data: { text: newText } },
-      {
-        onError: (error) => {
-          toast.error('Failed to edit node', (error as Error).message);
         },
       }
     );
@@ -250,40 +190,71 @@ export default function ConversationPage() {
                 className="hidden"
                 id="import-file"
               />
-              <label
-                htmlFor="import-file"
-                className="px-2 md:px-3 py-1 bg-purple-500 text-white rounded text-xs hover:bg-purple-600 cursor-pointer"
-              >
-                Import
-              </label>
-              <button
-                onClick={() => {
-                  exportConversationMutation.mutate({ conversationId: conversation.id });
-                }}
-                disabled={exportConversationMutation.isPending}
-                className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-              >
-                {exportConversationMutation.isPending ? 'Exporting...' : 'Export'}
-              </button>
-              <button
-                onClick={() => {
-                  shareConversationMutation.mutate(
-                    { conversationId: conversation.id },
-                    {
-                      onSuccess: (data) => {
-                        setShareModal({ isOpen: true, url: data.url });
+              <div className="relative group">
+                <label
+                  htmlFor="import-file"
+                  className="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer transition-all duration-200 hover:shadow-md"
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  Import
+                </label>
+                <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 px-2 py-1 text-xs text-white bg-gray-900 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                  Import conversation from JSON file
+                </div>
+              </div>
+              <div className="relative group">
+                <button
+                  onClick={() => {
+                    exportConversationMutation.mutate({
+                      conversationId: conversation.id,
+                    });
+                  }}
+                  disabled={exportConversationMutation.isPending}
+                  className="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-all duration-200 hover:shadow-md"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  {exportConversationMutation.isPending
+                    ? 'Exporting...'
+                    : 'Export'}
+                </button>
+                <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 px-2 py-1 text-xs text-white bg-gray-900 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                  Export conversation to JSON file
+                </div>
+              </div>
+              <div className="relative group">
+                <button
+                  onClick={() =>
+                    shareConversationMutation.mutate(
+                      {
+                        conversationId: conversation?.id || '',
+                        nodeId: activeNodeId || undefined,
                       },
-                      onError: (error) => {
-                        toast.error('Share failed', (error as Error).message);
-                      },
-                    }
-                  );
-                }}
-                disabled={shareConversationMutation.isPending}
-                className="px-2 md:px-3 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600 disabled:opacity-50"
-              >
-                {shareConversationMutation.isPending ? 'Sharing...' : 'Share'}
-              </button>
+                      {
+                        onSuccess: data => {
+                          setShareModal({
+                            isOpen: true,
+                            url: data.url,
+                          });
+                        },
+                        onError: error => {
+                          toast.error(
+                            'Share Failed',
+                            'Failed to share conversation.'
+                          );
+                        },
+                      }
+                    )
+                  }
+                  disabled={shareConversationMutation.isPending}
+                  className="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-all duration-200 hover:shadow-md"
+                >
+                  <Share2 className="w-4 h-4 mr-2" />
+                  {shareConversationMutation.isPending ? 'Sharing...' : 'Share'}
+                </button>
+                <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 px-2 py-1 text-xs text-white bg-gray-900 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                  Share active conversation path
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -308,6 +279,7 @@ export default function ConversationPage() {
               // Keep the ChatPane display as-is, just update active node for graph highlighting
               setActiveNodeId(nodeId);
             }}
+            isGeneratingAI={isGeneratingAI}
             className="h-full"
           />
         </div>
@@ -366,9 +338,12 @@ export default function ConversationPage() {
                     {
                       onSuccess: () => {
                         setImportModal({ isOpen: false, file: null });
-                        toast.success('Import successful', 'Conversation imported successfully');
+                        toast.success(
+                          'Import successful',
+                          'Conversation imported successfully'
+                        );
                       },
-                      onError: (error) => {
+                      onError: error => {
                         toast.error('Import failed', (error as Error).message);
                       },
                     }
@@ -390,12 +365,15 @@ export default function ConversationPage() {
                   importConversationMutation.mutate(
                     { file: importModal.file },
                     {
-                      onSuccess: (result) => {
+                      onSuccess: result => {
                         setImportModal({ isOpen: false, file: null });
                         router.push(`/c/${result.conversationId}`);
-                        toast.success('Import successful', 'New conversation created');
+                        toast.success(
+                          'Import successful',
+                          'New conversation created'
+                        );
                       },
-                      onError: (error) => {
+                      onError: error => {
                         toast.error('Import failed', (error as Error).message);
                       },
                     }

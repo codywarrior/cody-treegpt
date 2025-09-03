@@ -32,15 +32,11 @@ import {
   Calendar,
   MessageSquare,
 } from 'lucide-react';
-import { useAccountInfo, useUpdateAccount, useDeleteAccount } from '@/hooks/use-conversations';
-
-interface AccountInfo {
-  id: string;
-  email: string;
-  displayName: string | null;
-  createdAt: string;
-  conversationCount: number;
-}
+import {
+  useAccountInfo,
+  useUpdateAccount,
+  useDeleteAccount,
+} from '@/hooks/use-conversations';
 
 export default function AccountPage() {
   // Form state
@@ -68,7 +64,7 @@ export default function AccountPage() {
 
   // Handle authentication errors
   if (error && 'status' in error && error.status === 401) {
-    router.push('/auth/login');
+    router.push('/auth/signin');
     return null;
   }
 
@@ -139,7 +135,7 @@ export default function AccountPage() {
         });
         router.push('/');
       },
-      onError: (error: any) => {
+      onError: (error: Error) => {
         toast({
           title: 'Deletion failed',
           description: error?.message || 'Failed to delete account',
@@ -379,7 +375,9 @@ export default function AccountPage() {
                     disabled={deleteAccountMutation.isPending}
                     className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
                   >
-                    {deleteAccountMutation.isPending ? 'Deleting...' : 'Delete Account'}
+                    {deleteAccountMutation.isPending
+                      ? 'Deleting...'
+                      : 'Delete Account'}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>

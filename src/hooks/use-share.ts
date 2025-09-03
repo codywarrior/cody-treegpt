@@ -1,11 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { shareService, type CreateShareLinkRequest, type DeleteShareLinkRequest } from '@/services/share.service';
+import {
+  shareService,
+  type CreateShareLinkRequest,
+  type DeleteShareLinkRequest,
+} from '@/services/share.service';
 import { useToast } from '@/hooks/use-toast';
 
 // Query keys
 export const shareKeys = {
   all: ['share'] as const,
-  tokens: (conversationId: string) => [...shareKeys.all, 'tokens', conversationId] as const,
+  tokens: (conversationId: string) =>
+    [...shareKeys.all, 'tokens', conversationId] as const,
   public: (token: string) => [...shareKeys.all, 'public', token] as const,
 };
 
@@ -23,7 +28,7 @@ export function useShareTokens(conversationId: string) {
 export function usePublicContent(token: string) {
   return useQuery({
     queryKey: shareKeys.public(token),
-    queryFn: () => shareService.getPublicContent(token),
+    queryFn: () => shareService.getPublicConversation(token),
     enabled: !!token,
     retry: false,
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -36,25 +41,29 @@ export function useCreateShareLink() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: (data: CreateShareLinkRequest) => shareService.createShareLink(data),
+    mutationFn: (data: CreateShareLinkRequest) =>
+      shareService.createShareLink(data),
     onSuccess: async (response, variables) => {
       // Copy to clipboard
       await navigator.clipboard.writeText(response.url);
-      
+
       // Invalidate tokens for this conversation
-      queryClient.invalidateQueries({ 
-        queryKey: shareKeys.tokens(variables.conversationId) 
+      queryClient.invalidateQueries({
+        queryKey: shareKeys.tokens(variables.conversationId),
       });
-      
+
       toast({
         title: 'Share link created',
         description: 'Link copied to clipboard',
       });
     },
-    onError: (error) => {
+    onError: error => {
       toast({
         title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to create share link',
+        description:
+          error instanceof Error
+            ? error.message
+            : 'Failed to create share link',
         variant: 'destructive',
       });
     },
@@ -67,23 +76,26 @@ export function useRevokeShareLink() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: (data: DeleteShareLinkRequest & { conversationId: string }) => 
+    mutationFn: (data: DeleteShareLinkRequest & { conversationId: string }) =>
       shareService.revokeShareLink(data),
     onSuccess: (_, variables) => {
       // Invalidate tokens for this conversation
-      queryClient.invalidateQueries({ 
-        queryKey: shareKeys.tokens(variables.conversationId) 
+      queryClient.invalidateQueries({
+        queryKey: shareKeys.tokens(variables.conversationId),
       });
-      
+
       toast({
         title: 'Link revoked',
         description: 'Share link has been disabled',
       });
     },
-    onError: (error) => {
+    onError: error => {
       toast({
         title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to revoke share link',
+        description:
+          error instanceof Error
+            ? error.message
+            : 'Failed to revoke share link',
         variant: 'destructive',
       });
     },

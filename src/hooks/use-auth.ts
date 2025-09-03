@@ -1,5 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { authService, type SignInRequest, type SignUpRequest } from '@/services/auth.service';
+import {
+  authService,
+  type SignInRequest,
+  type SignUpRequest,
+} from '@/services/auth.service';
 import { useToast } from '@/hooks/use-toast';
 
 // Query keys
@@ -35,19 +39,20 @@ export function useSignIn() {
 
   return useMutation({
     mutationFn: (data: SignInRequest) => authService.signIn(data),
-    onSuccess: (response) => {
+    onSuccess: response => {
       // Set user data in cache
       queryClient.setQueryData(authKeys.user(), response);
-      
+
       toast({
         title: 'Welcome back!',
         description: 'Successfully signed in',
       });
     },
-    onError: (error) => {
+    onError: error => {
       toast({
         title: 'Sign in failed',
-        description: error instanceof Error ? error.message : 'Invalid credentials',
+        description:
+          error instanceof Error ? error.message : 'Invalid credentials',
         variant: 'destructive',
       });
     },
@@ -61,19 +66,20 @@ export function useSignUp() {
 
   return useMutation({
     mutationFn: (data: SignUpRequest) => authService.signUp(data),
-    onSuccess: (response) => {
+    onSuccess: response => {
       // Set user data in cache
       queryClient.setQueryData(authKeys.user(), response);
-      
+
       toast({
         title: 'Welcome!',
         description: 'Account created successfully',
       });
     },
-    onError: (error) => {
+    onError: error => {
       toast({
         title: 'Sign up failed',
-        description: error instanceof Error ? error.message : 'Failed to create account',
+        description:
+          error instanceof Error ? error.message : 'Failed to create account',
         variant: 'destructive',
       });
     },
@@ -90,16 +96,17 @@ export function useSignOut() {
     onSuccess: () => {
       // Clear all cached data
       queryClient.clear();
-      
+
       toast({
         title: 'Signed out',
         description: 'Successfully signed out',
       });
     },
-    onError: (error) => {
+    onError: error => {
       toast({
         title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to sign out',
+        description:
+          error instanceof Error ? error.message : 'Failed to sign out',
         variant: 'destructive',
       });
     },

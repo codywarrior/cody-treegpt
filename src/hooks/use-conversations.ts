@@ -1,16 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { conversationService, type Conversation, type CreateConversationRequest, type UpdateConversationRequest } from '@/services/conversations.service';
+import {
+  conversationService,
+  type Conversation,
+  type CreateConversationRequest,
+  type UpdateConversationRequest,
+} from '@/services/conversations.service';
 import { useToast } from '@/hooks/use-toast';
 
 // Query keys
 export const conversationKeys = {
   all: ['conversations'] as const,
   lists: () => [...conversationKeys.all, 'list'] as const,
-  list: (filters: string) => [...conversationKeys.lists(), { filters }] as const,
+  list: (filters: string) =>
+    [...conversationKeys.lists(), { filters }] as const,
   details: () => [...conversationKeys.all, 'detail'] as const,
   detail: (id: string) => [...conversationKeys.details(), id] as const,
 };
-
 
 // Get all conversations
 export function useConversations() {
@@ -37,11 +42,12 @@ export function useCreateConversation() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: (data: CreateConversationRequest) => conversationService.createConversation(data),
-    onSuccess: (response) => {
+    mutationFn: (data: CreateConversationRequest) =>
+      conversationService.createConversation(data),
+    onSuccess: () => {
       // Invalidate and refetch conversations list
       queryClient.invalidateQueries({ queryKey: conversationKeys.lists() });
-      
+
       toast({
         title: 'Success',
         description: 'Conversation created successfully',
@@ -56,7 +62,6 @@ export function useCreateConversation() {
     },
   });
 }
-
 
 // Get single conversation with nodes
 export const useConversationDetail = (conversationId: string) => {
@@ -75,18 +80,24 @@ export function useUpdateConversation() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: UpdateConversationRequest }) => 
-      conversationService.updateConversation(id, data),
+    mutationFn: ({
+      id,
+      data,
+    }: {
+      id: string;
+      data: UpdateConversationRequest;
+    }) => conversationService.updateConversation(id, data),
     onSuccess: (response, variables) => {
       // Update the conversation in cache
       queryClient.setQueryData(
         conversationKeys.detail(variables.id),
-        (old: any) => old ? { ...old, conversation: response.conversation } : undefined
+        (old: { conversation: Conversation; nodes: unknown[] } | undefined) =>
+          old ? { ...old, conversation: response.conversation } : undefined
       );
-      
+
       // Invalidate conversations list to reflect changes
       queryClient.invalidateQueries({ queryKey: conversationKeys.lists() });
-      
+
       toast({
         title: 'Success',
         description: 'Conversation updated successfully',
@@ -111,20 +122,24 @@ export function useDeleteConversation() {
     mutationFn: (id: string) => conversationService.deleteConversation(id),
     onSuccess: (_, deletedId) => {
       // Remove from cache
-      queryClient.removeQueries({ queryKey: conversationKeys.detail(deletedId) });
-      
+      queryClient.removeQueries({
+        queryKey: conversationKeys.detail(deletedId),
+      });
+
       // Update conversations list
       queryClient.setQueryData(
         conversationKeys.lists(),
-        (old: any) => {
+        (old: { conversations: Conversation[] } | undefined) => {
           if (!old?.conversations) return old;
           return {
             ...old,
-            conversations: old.conversations.filter((conv: Conversation) => conv.id !== deletedId)
+            conversations: old.conversations.filter(
+              (conv: Conversation) => conv.id !== deletedId
+            ),
           };
         }
       );
-      
+
       toast({
         title: 'Success',
         description: 'Conversation deleted successfully',
@@ -151,7 +166,7 @@ export function useAccountInfo() {
   return useQuery({
     queryKey: accountKeys.info(),
     queryFn: async () => {
-      const response = await fetch('/account');
+      const response = await fetch('/api/account');
       if (!response.ok) {
         throw new Error('Failed to fetch account info');
       }
@@ -186,7 +201,7 @@ export function useUpdateAccount() {
     onSuccess: () => {
       // Invalidate account info to refetch
       queryClient.invalidateQueries({ queryKey: accountKeys.info() });
-      
+
       toast({
         title: 'Success',
         description: 'Account updated successfully',
@@ -219,7 +234,7 @@ export function useDeleteAccount() {
     onSuccess: () => {
       // Clear all cached data
       queryClient.clear();
-      
+
       toast({
         title: 'Success',
         description: 'Account deleted successfully',
@@ -241,7 +256,7 @@ export function useSignIn() {
 
   return useMutation({
     mutationFn: async (data: { email: string; password: string }) => {
-      const response = await fetch('/auth/login', {
+      const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -266,12 +281,12 @@ export function useSignUp() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (data: { 
-      email: string; 
-      password: string; 
+    mutationFn: async (data: {
+      email: string;
+      password: string;
       displayName?: string;
     }) => {
-      const response = await fetch('/auth/signup', {
+      const response = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -297,7 +312,7 @@ export function useLogout() {
 
   return useMutation({
     mutationFn: async () => {
-      const response = await fetch('/auth/logout', {
+      const response = await fetch('/api/auth/logout', {
         method: 'POST',
       });
       if (!response.ok) {
@@ -306,6 +321,8 @@ export function useLogout() {
       return response.json();
     },
     onSuccess: () => {
+      // Cancel all ongoing queries to prevent 500 errors
+      queryClient.cancelQueries();
       // Clear all cached data
       queryClient.clear();
     },
@@ -339,12 +356,12 @@ export function useCreateNode() {
     },
     onSuccess: (_, variables) => {
       // Invalidate conversation detail to refetch nodes
-      queryClient.invalidateQueries({ 
-        queryKey: conversationKeys.detail(variables.conversationId) 
+      queryClient.invalidateQueries({
+        queryKey: conversationKeys.detail(variables.conversationId),
       });
       // Also invalidate conversation lists in case node count changed
-      queryClient.invalidateQueries({ 
-        queryKey: conversationKeys.lists() 
+      queryClient.invalidateQueries({
+        queryKey: conversationKeys.lists(),
       });
     },
     onError: (error: Error) => {
@@ -362,7 +379,11 @@ export function useUpdateNode() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async (data: { id: string; text: string; conversationId: string }) => {
+    mutationFn: async (data: {
+      id: string;
+      text: string;
+      conversationId: string;
+    }) => {
       const response = await fetch(`/api/nodes/${data.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -375,14 +396,14 @@ export function useUpdateNode() {
     },
     onSuccess: (_, variables) => {
       // Invalidate conversation detail to refetch nodes
-      queryClient.invalidateQueries({ 
-        queryKey: conversationKeys.detail(variables.conversationId) 
+      queryClient.invalidateQueries({
+        queryKey: conversationKeys.detail(variables.conversationId),
       });
       // Also invalidate conversation lists
-      queryClient.invalidateQueries({ 
-        queryKey: conversationKeys.lists() 
+      queryClient.invalidateQueries({
+        queryKey: conversationKeys.lists(),
       });
-      
+
       toast({
         title: 'Success',
         description: 'Message updated successfully',
@@ -414,14 +435,14 @@ export function useDeleteNode() {
     },
     onSuccess: (_, variables) => {
       // Invalidate conversation detail to refetch nodes
-      queryClient.invalidateQueries({ 
-        queryKey: conversationKeys.detail(variables.conversationId) 
+      queryClient.invalidateQueries({
+        queryKey: conversationKeys.detail(variables.conversationId),
       });
       // Also invalidate conversation lists in case node count changed
-      queryClient.invalidateQueries({ 
-        queryKey: conversationKeys.lists() 
+      queryClient.invalidateQueries({
+        queryKey: conversationKeys.lists(),
       });
-      
+
       toast({
         title: 'Success',
         description: 'Message deleted successfully',
@@ -443,7 +464,10 @@ export function useRequestAIReply() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async (data: { userNodeId: string; conversationId: string }) => {
+    mutationFn: async (data: {
+      userNodeId: string;
+      conversationId: string;
+    }) => {
       const response = await fetch(`/api/nodes/${data.userNodeId}/ai-reply`, {
         method: 'POST',
       });
@@ -454,12 +478,12 @@ export function useRequestAIReply() {
     },
     onSuccess: (_, variables) => {
       // Invalidate conversation detail after AI reply completes
-      queryClient.invalidateQueries({ 
-        queryKey: conversationKeys.detail(variables.conversationId) 
+      queryClient.invalidateQueries({
+        queryKey: conversationKeys.detail(variables.conversationId),
       });
       // Also invalidate conversation lists in case node count changed
-      queryClient.invalidateQueries({ 
-        queryKey: conversationKeys.lists() 
+      queryClient.invalidateQueries({
+        queryKey: conversationKeys.lists(),
       });
     },
     onError: (error: Error) => {
@@ -489,13 +513,15 @@ export function useExportConversation() {
         params.set('node', data.nodeId);
       }
 
-      const response = await fetch(`/export/${data.conversationId}?${params}`);
+      const response = await fetch(
+        `/api/export/${data.conversationId}?${params}`
+      );
       if (!response.ok) {
         throw new Error('Failed to export conversation');
       }
 
       const blob = await response.blob();
-      
+
       // Auto-download the file
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -513,75 +539,80 @@ export function useExportConversation() {
 
 // Share conversation hook
 export function useShareConversation() {
-return useMutation({
-mutationFn: async (data: { 
-conversationId: string; 
-nodeId?: string; 
-expiresInDays?: number; 
-}) => {
-const response = await fetch('/api/share', {
-method: 'POST',
-headers: {
-'Content-Type': 'application/json',
-},
-body: JSON.stringify(data),
-});
-if (!response.ok) {
-throw new Error('Failed to share conversation');
-}
-return response.json();
-},
-onSuccess: async (data) => {
-// Copy to clipboard
-await navigator.clipboard.writeText(data.url);
-},
-});
+  return useMutation({
+    mutationFn: async (data: {
+      conversationId: string;
+      nodeId?: string;
+      expiresInDays?: number;
+    }) => {
+      const response = await fetch('/api/share', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to share conversation');
+      }
+      return response.json();
+    },
+    onSuccess: async data => {
+      // Copy to clipboard
+      await navigator.clipboard.writeText(data.url);
+    },
+  });
 }
 
 // Get share tokens hook
-export function useShareTokens(conversationId: string, enabled: boolean = true) {
-return useQuery({
-queryKey: ['shareTokens', conversationId],
-queryFn: async () => {
-const response = await fetch(`/share?conversationId=${conversationId}`);
-if (!response.ok) {
-throw new Error('Failed to fetch share tokens');
-}
-const data = await response.json();
-return data.tokens;
-},
-enabled: enabled && !!conversationId,
-});
+export function useShareTokens(
+  conversationId: string,
+  enabled: boolean = true
+) {
+  return useQuery({
+    queryKey: ['shareTokens', conversationId],
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/share?conversationId=${conversationId}`
+      );
+      if (!response.ok) {
+        throw new Error('Failed to fetch share tokens');
+      }
+      const data = await response.json();
+      return data.tokens;
+    },
+    enabled: enabled && !!conversationId,
+  });
 }
 
 // Revoke share token hook
 export function useRevokeShareToken() {
-const queryClient = useQueryClient();
-  
-return useMutation({
-mutationFn: async (token: string) => {
-const response = await fetch('/api/share', {
-method: 'DELETE',
-headers: {
-'Content-Type': 'application/json',
-},
-body: JSON.stringify({ token }),
-});
-if (!response.ok) {
-throw new Error('Failed to revoke share token');
-}
-return response.json();
-},
-onSuccess: () => {
-// Invalidate share tokens query to refresh the list
-queryClient.invalidateQueries({ queryKey: ['shareTokens'] });
-},
-});
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (token: string) => {
+      const response = await fetch('/api/share', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ token }),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to revoke share token');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      // Invalidate share tokens query to refresh the list
+      queryClient.invalidateQueries({ queryKey: ['shareTokens'] });
+    },
+  });
 }
 
 // Import conversation hook
 export function useImportConversation() {
-const queryClient = useQueryClient();
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (data: { file: File; conversationId?: string }) => {
@@ -591,7 +622,7 @@ const queryClient = useQueryClient();
         formData.append('conversationId', data.conversationId);
       }
 
-      const response = await fetch('/import', {
+      const response = await fetch('/api/import', {
         method: 'POST',
         body: formData,
       });
@@ -600,9 +631,15 @@ const queryClient = useQueryClient();
       }
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: data => {
       // Invalidate conversations list to show new imported data
       queryClient.invalidateQueries({ queryKey: conversationKeys.lists() });
+      // If importing into existing conversation, invalidate its details
+      if (data.conversationId) {
+        queryClient.invalidateQueries({
+          queryKey: conversationKeys.detail(data.conversationId),
+        });
+      }
     },
   });
 }
@@ -612,7 +649,7 @@ export function usePublicShareData(token: string) {
   return useQuery({
     queryKey: ['publicShare', token],
     queryFn: async () => {
-      const response = await fetch(`/public/${token}`);
+      const response = await fetch(`/api/public/${token}`);
       if (!response.ok) {
         if (response.status === 404) {
           throw new Error('This sharing link has expired or does not exist.');

@@ -11,31 +11,18 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Clock, User, Bot, Eye } from 'lucide-react';
-import { ExternalLink } from 'lucide-react';
+import { Clock, User, Bot, Eye, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import { NodeT } from '@/lib/types';
 import { usePublicShareData } from '@/hooks/use-conversations';
-
-interface PublicTokenData {
-  conversation: {
-    id: string;
-    title: string;
-  };
-  node?: {
-    id: string;
-    text: string;
-    role: string;
-  };
-  expiresAt: string;
-  nodes: NodeT[];
-}
+// import { useExportPDF } from '@/hooks/use-export-pdf';
 
 export default function PublicSharePage() {
   const params = useParams();
   const token = params.token as string;
 
   const { data, isLoading, error } = usePublicShareData(token);
+  // const { exportToPDF, isExporting } = useExportPDF();
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -91,7 +78,8 @@ export default function PublicSharePage() {
               <div className="text-6xl">🔗</div>
               <h2 className="text-2xl font-semibold">Link Not Found</h2>
               <p className="text-muted-foreground max-w-md mx-auto">
-                {error?.message || 'This sharing link has expired or does not exist.'}
+                {error?.message ||
+                  'This sharing link has expired or does not exist.'}
               </p>
               <Button asChild>
                 <Link href="/">
@@ -112,7 +100,10 @@ export default function PublicSharePage() {
     expiresAt.getTime() - Date.now() < 7 * 24 * 60 * 60 * 1000; // 7 days
 
   return (
-    <div className="container max-w-4xl mx-auto py-8 space-y-6">
+    <div
+      id="pdf-content"
+      className="container max-w-4xl mx-auto py-8 space-y-6"
+    >
       {/* Header */}
       <Card>
         <CardHeader>
@@ -219,18 +210,28 @@ export default function PublicSharePage() {
       </Card>
 
       {/* Footer */}
-      <Card>
+      <Card className="pdf-exclude">
         <CardContent className="pt-6">
           <div className="text-center space-y-2">
             <p className="text-sm text-muted-foreground">
               This conversation was shared using GPTree
             </p>
-            <Button asChild variant="outline">
-              <a href="/" target="_blank" rel="noopener noreferrer">
-                <ExternalLink className="w-4 h-4 mr-2" />
-                Try GPTree
-              </a>
-            </Button>
+            <div className="flex gap-2 justify-center">
+              {/* <Button
+                onClick={() => exportToPDF()}
+                variant="outline"
+                disabled={isExporting}
+              >
+                <Download className="w-4 h-4 mr-2" />
+                {isExporting ? 'Exporting...' : 'Export PDF'}
+              </Button> */}
+              <Button asChild variant="outline">
+                <a href="/" target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="w-4 h-4 mr-2" />
+                  Try GPTree
+                </a>
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

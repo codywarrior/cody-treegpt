@@ -31,7 +31,7 @@ export default function ShareModal({
   };
 
   const handleOpen = () => {
-    window.open(shareUrl, "_blank", "noopener,noreferrer");
+    window.open(shareUrl, '_blank', 'noopener,noreferrer');
   };
 
   return (

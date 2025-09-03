@@ -34,7 +34,7 @@ export const authService = {
 
   // Sign in
   signIn: async (data: SignInRequest): Promise<AuthResponse> => {
-    return apiClient.post<AuthResponse>('/auth/signin', data);
+    return apiClient.post<AuthResponse>('/auth/login', data);
   },
 
   // Sign up

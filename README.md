@@ -7,7 +7,7 @@ A Next.js application enabling branching AI conversations in a tree structure. C
 - **Tree-Structured Conversations**: Branch from any message to create alternative conversation paths
 - **Interactive Graph Visualization**: D3.js tree layout with node navigation and active path highlighting
 - **Context-Aware AI**: OpenAI GPT-4o-mini integration with path-aware context building (7000 token limit)
-- **Real-Time Streaming**: Server-sent events for live AI response streaming with 60s timeout
+- **Streaming AI Responses**: Real-time response generation with animated loading states
 - **Conversation Management**: Create, edit, delete conversations with search and pagination
 - **Export/Import**: JSON and Markdown export/import functionality
 - **Public Sharing**: Generate shareable links for conversations
@@ -25,9 +25,10 @@ A Next.js application enabling branching AI conversations in a tree structure. C
 ### UI & Styling
 
 - **Tailwind CSS 4** for styling
-- **Framer Motion 12.23.12** for animations
+- **Framer Motion 12.23.12** for smooth animations and transitions
 - **Radix UI** components (dialogs, tabs, toasts)
 - **Lucide React** for icons
+- **React Query (TanStack Query)** for server state management
 
 ### AI & Data Processing
 
@@ -45,6 +46,7 @@ A Next.js application enabling branching AI conversations in a tree structure. C
 - **bcryptjs 3.0.2** for password hashing
 - Session-based authentication with secure cookies
 - Rate limiting (10 requests/minute per user)
+- Environment-based configuration for API keys
 
 ## Getting Started
 
@@ -98,19 +100,20 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) to see the application.
 
-## Branching Implementation
+## Architecture Implementation
 
 ### Tree Structure
 
 - Each conversation node has a `parentId` creating a directed acyclic graph (DAG)
 - Active path calculation: `getActivePath()` traverses from selected node to root
 - Context building: `buildAIContext()` with 7000 token limit and recent message prioritization
-- AI responses streamed via Server-Sent Events and stored as child nodes
+- AI responses generated via streaming API with animated loading states
 
 ### Core Algorithms
 
 - **Path Finding**: `pathToRoot()` and `findLcaIndex()` for efficient tree traversal
 - **Context Management**: Token estimation and summarization for long conversation paths
+- **State Management**: React Query for server state with optimistic updates
 - **Rate Limiting**: 10 requests/minute per user with IP-based tracking
 
 ### Graph Visualization
@@ -118,6 +121,7 @@ Open [http://localhost:3000](http://localhost:3000) to see the application.
 - **D3.js Tree Layout**: Hierarchical positioning with `d3.tree()` and custom spacing
 - **Interactive Navigation**: Click nodes to switch conversation branches
 - **Active Path Highlighting**: Visual emphasis on current conversation thread
+- **Responsive Design**: Mobile-friendly with touch interactions
 
 ## Project Structure
 
@@ -125,18 +129,26 @@ Open [http://localhost:3000](http://localhost:3000) to see the application.
 src/
 ├── app/
 │   ├── api/
-│   │   ├── auth/                    # login, logout, signup endpoints
+│   │   ├── auth/                    # Authentication endpoints
 │   │   ├── conversations/           # CRUD for conversations
-│   │   ├── nodes/[nodeId]/ai-reply/ # SSE streaming for AI responses
+│   │   ├── nodes/[nodeId]/ai-reply/ # Streaming AI response generation
 │   │   ├── export/[cid]/           # JSON/Markdown export
 │   │   └── share/                  # Public sharing tokens
 │   ├── c/[cid]/                    # Conversation workspace pages
 │   └── auth/signin/                # Authentication UI
 ├── components/
-│   ├── ChatPaneV2.tsx              # Chat interface with branching
-│   ├── Graph.tsx                   # D3.js tree visualization
-│   ├── ExportImportDialog.tsx      # Export/import functionality
-│   └── ShareDialog.tsx             # Public sharing interface
+│   ├── chat/
+│   │   ├── chat-container.tsx      # Main chat interface
+│   │   ├── message-list.tsx        # Message rendering with animations
+│   │   ├── message-item.tsx        # Individual message component
+│   │   └── chat-input.tsx          # Message input with branching
+│   ├── visualization/
+│   │   └── graph.tsx               # D3.js tree visualization
+│   └── ui/                         # Reusable UI components
+├── hooks/
+│   ├── use-chat-actions.ts         # Chat operations & state management
+│   ├── use-nodes.ts                # Node CRUD with React Query
+│   └── use-conversations.ts        # Conversation management
 ├── lib/
 │   ├── ai-context.ts               # Context building & token management
 │   ├── tree-algorithms.ts          # Path finding & tree traversal
@@ -152,7 +164,8 @@ src/
 3. **Send Messages**: Type in the chat interface (Enter to send, Shift+Enter for new line)
 4. **Branch Creation**: Click branch icon on any message to create alternative conversation paths
 5. **Tree Navigation**: Click nodes in the graph to switch between conversation branches
-6. **AI Responses**: Automatic streaming responses with retry options
+6. **AI Responses**: Real-time streaming responses with animated loading states
+7. **Export/Share**: Export conversations or generate public sharing links
 
 ## Contributing
 

@@ -55,13 +55,14 @@ export async function GET(
       const additionalNodeIds: string[] = [];
       for (const node of pathNodes) {
         if (node.role === 'user') {
-          // Find the assistant response for this user node
+          // Find the LATEST assistant response for this user node (most recent regeneration)
           const assistantResponse = await prisma.node.findFirst({
             where: {
               parentId: node.id,
               role: 'assistant',
               conversationId: tokenData.conversationId,
             },
+            orderBy: { createdAt: 'desc' }, // Get the most recent response
           });
           if (assistantResponse) {
             additionalNodeIds.push(assistantResponse.id);

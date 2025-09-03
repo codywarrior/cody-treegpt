@@ -23,7 +23,7 @@ export const exportImportService = {
     const params: Record<string, string> = {
       format: data.format,
     };
-    
+
     if (data.nodeId) {
       params.node = data.nodeId;
     }
@@ -35,11 +35,11 @@ export const exportImportService = {
   importConversation: async (data: ImportRequest): Promise<ImportResponse> => {
     const formData = new FormData();
     formData.append('file', data.file);
-    
+
     if (data.title) {
       formData.append('title', data.title);
     }
-    
+
     if (data.conversationId) {
       formData.append('conversationId', data.conversationId);
     }

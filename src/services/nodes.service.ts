@@ -33,7 +33,10 @@ export const nodesService = {
   },
 
   // Edit node content
-  editNode: async (nodeId: string, data: UpdateNodeRequest): Promise<{ node: ChatNode }> => {
+  editNode: async (
+    nodeId: string,
+    data: UpdateNodeRequest
+  ): Promise<{ node: ChatNode }> => {
     return apiClient.put<{ node: ChatNode }>(`/nodes/${nodeId}/edit`, data);
   },
 

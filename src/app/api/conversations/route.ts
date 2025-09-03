@@ -23,6 +23,12 @@ export async function GET() {
     return NextResponse.json({ conversations });
   } catch (error) {
     console.error('Get conversations error:', error);
+
+    // If it's an auth error (redirect), return 401 instead of 500
+    if (error && typeof error === 'object' && 'digest' in error) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -49,6 +55,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ conversation });
   } catch (error) {
     console.error('Create conversation error:', error);
+
+    // If it's an auth error (redirect), return 401 instead of 500
+    if (error && typeof error === 'object' && 'digest' in error) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

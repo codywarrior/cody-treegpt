@@ -1,4 +1,4 @@
-interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   data?: T;
   error?: string;
   status: number;
@@ -24,27 +24,30 @@ class ApiClient {
 
   private async handleResponse<T>(response: Response): Promise<T> {
     const contentType = response.headers.get('content-type');
-    
+
     if (!response.ok) {
       let errorMessage = `HTTP ${response.status}`;
-      
+
       if (contentType?.includes('application/json')) {
         try {
           const errorData = await response.json();
           errorMessage = errorData.error || errorMessage;
-        } catch {
+        } catch (_: unknown) {
           // If JSON parsing fails, use status text
           errorMessage = response.statusText || errorMessage;
         }
       }
-      
+
       throw new ApiError(errorMessage, response.status, response);
     }
 
     // Handle blob responses (for file downloads)
-    if (contentType?.includes('application/octet-stream') || 
-        contentType?.includes('text/plain') ||
-        contentType?.includes('application/json') && response.headers.get('content-disposition')) {
+    if (
+      contentType?.includes('application/octet-stream') ||
+      contentType?.includes('text/plain') ||
+      (contentType?.includes('application/json') &&
+        response.headers.get('content-disposition'))
+    ) {
       return response.blob() as unknown as T;
     }
 
@@ -57,79 +60,55 @@ class ApiClient {
     return response.text() as unknown as T;
   }
 
-  async get<T = any>(endpoint: string, params?: Record<string, string>): Promise<T> {
-    const url = new URL(`${this.baseUrl}${endpoint}`, window.location.origin);
-    
+  async get<T>(url: string, params?: Record<string, unknown>): Promise<T> {
+    const urlObject = new URL(`${this.baseUrl}${url}`, window.location.origin);
+
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
-        url.searchParams.append(key, value);
+        urlObject.searchParams.append(key, String(value));
       });
     }
 
-    const response = await fetch(url.toString());
+    const response = await fetch(urlObject.toString());
     return this.handleResponse<T>(response);
   }
 
-  async post<T = any>(
-    endpoint: string,
-    data?: any,
-    options?: { headers?: Record<string, string> }
-  ): Promise<T> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    };
-
-    // Handle FormData
-    if (data instanceof FormData) {
-      delete headers['Content-Type']; // Let browser set boundary
-    }
-
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+  async post<T>(url: string, data?: unknown, config?: RequestInit): Promise<T> {
+    const response = await fetch(`${this.baseUrl}${url}`, {
       method: 'POST',
-      headers,
+      ...config,
       body: data instanceof FormData ? data : JSON.stringify(data),
     });
 
     return this.handleResponse<T>(response);
   }
 
-  async put<T = any>(
-    endpoint: string,
-    data?: any,
-    options?: { headers?: Record<string, string> }
-  ): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+  async put<T>(url: string, data?: unknown, config?: RequestInit): Promise<T> {
+    const response = await fetch(`${this.baseUrl}${url}`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        ...options?.headers,
-      },
+      ...config,
       body: JSON.stringify(data),
     });
 
     return this.handleResponse<T>(response);
   }
 
-  async patch<T = any>(
-    endpoint: string,
-    data?: any,
-    options?: { headers?: Record<string, string> }
+  async patch<T>(
+    url: string,
+    data?: unknown,
+    config?: RequestInit
   ): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+    const response = await fetch(`${this.baseUrl}${url}`, {
       method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        ...options?.headers,
-      },
+      ...config,
       body: JSON.stringify(data),
     });
 
     return this.handleResponse<T>(response);
   }
 
-  async delete<T = any>(endpoint: string): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+  async delete<T>(url: string): Promise<T> {
+    const response = await fetch(`${this.baseUrl}${url}`, {
       method: 'DELETE',
     });
 
@@ -139,4 +118,3 @@ class ApiClient {
 
 export const apiClient = new ApiClient();
 export { ApiError };
-export type { ApiResponse };
