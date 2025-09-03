@@ -252,13 +252,18 @@ export function useDeleteNode() {
 
       return { previousData };
     },
-    onSuccess: () => {
+    onSuccess: (_, nodeId, context) => {
       // Invalidate to ensure server state is synced
       queryClient.invalidateQueries({
         queryKey: conversationKeys.details(),
       });
       queryClient.invalidateQueries({
         queryKey: conversationKeys.lists(),
+      });
+
+      // Force immediate refetch of all conversation details to sync graph
+      queryClient.refetchQueries({
+        queryKey: conversationKeys.details(),
       });
     },
     onError: (error, nodeId, context) => {

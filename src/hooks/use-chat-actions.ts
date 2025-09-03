@@ -94,6 +94,10 @@ export function useChatActions({
                   onError: () => {
                     callbacks.onLoadingEnd();
                   },
+                  onSettled: () => {
+                    // Ensure loading state is cleared regardless of success/error
+                    callbacks.onLoadingEnd();
+                  },
                 });
               },
               onError: error => {
