@@ -104,7 +104,7 @@ export function getChatActivePath(
 }
 
 /**
- * Calculate subtree width for layout (from treegpt)
+ * Calculate subtree width for layout
  */
 export function calculateSubtreeWidths(
   chatNodes: ChatNodeT[]

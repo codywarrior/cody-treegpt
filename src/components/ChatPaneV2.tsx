@@ -5,18 +5,18 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
-import { Send, Edit3, Trash2, RotateCcw, Copy, GitBranch } from 'lucide-react';
+import { Trash2, RotateCcw, Copy, GitBranch } from 'lucide-react';
 import { ChatNodeT } from '../lib/types';
 import { useToast } from '@/hooks/use-toast';
+import { useCreateNode, useGenerateAIReply, useEditNode, useDeleteNode } from '@/hooks/use-nodes';
+import { useQueryClient } from '@tanstack/react-query';
+import { conversationKeys } from '@/hooks/use-conversations';
 
 interface ChatPaneV2Props {
   chatNodes: ChatNodeT[];
   activeNodeId: string;
-  onSendMessage: (message: string, nodeId: string) => Promise<void>;
+  conversationId: string;
   onBranchFromNode?: (nodeId: string, message: string) => Promise<void>;
-  onRequestAIReply: (nodeId: string) => Promise<void>;
-  onDeleteNode: (nodeId: string) => Promise<void>;
-  onEditNode: (nodeId: string, newText: string) => Promise<void>;
   onNodeSelect: (nodeId: string) => void;
   className?: string;
 }
@@ -24,28 +24,31 @@ interface ChatPaneV2Props {
 export default function ChatPaneV2({
   chatNodes,
   activeNodeId,
-  onSendMessage,
+  conversationId,
   onBranchFromNode,
-  onRequestAIReply,
-  onDeleteNode,
-  onEditNode,
   onNodeSelect,
   className,
 }: ChatPaneV2Props) {
+  // TanStack Query hooks
+  const createNodeMutation = useCreateNode();
+  const generateAIReplyMutation = useGenerateAIReply();
+  const editNodeMutation = useEditNode();
+  const deleteNodeMutation = useDeleteNode();
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [optimisticMessage, setOptimisticMessage] = useState<string | null>(null);
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
-  const [editingText, setEditingText] = useState('');
+  const [branchingFromNode, setBranchingFromNode] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{
     nodeId: string;
     content: string;
   } | null>(null);
-  const [branchingFromNode, setBranchingFromNode] = useState<string | null>(
-    null
-  );
+  const [editingText, setEditingText] = useState('');
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { toast } = useToast();
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const queryClient = useQueryClient();
 
   const toastSuccess = (message: string) => {
     toast({ title: 'Success', description: message });
@@ -55,10 +58,40 @@ export default function ChatPaneV2({
     toast({ title: 'Error', description: message, variant: 'destructive' });
   };
 
-  // Auto-scroll to bottom when new messages arrive
+
+  // Auto-scroll to bottom when messages change or activeNodeId changes
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatNodes]);
+  }, [chatNodes, optimisticMessage, isGeneratingAI, activeNodeId]);
+
+  // Filter to show only the active chat path
+  const getActiveChatPath = useCallback(() => {
+    if (!activeNodeId || chatNodes.length === 0) return [];
+
+    const nodeMap = new Map(chatNodes.map(node => [node.id, node]));
+    const path: ChatNodeT[] = [];
+
+    // Start from active node and traverse up to root
+    let currentId: string | null = activeNodeId;
+    while (currentId) {
+      const node = nodeMap.get(currentId);
+      if (!node) break;
+      path.unshift(node); // Add to beginning to maintain order
+      currentId = node.parentId;
+    }
+
+    return path;
+  }, [chatNodes, activeNodeId]);
+
+  const activeChatPath = getActiveChatPath();
+
+  // Also scroll when the active chat path changes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [activeChatPath.length]);
 
   // Loading animation component
   const LoadingDots = () => {
@@ -81,22 +114,60 @@ export default function ChatPaneV2({
 
   // Handle sending messages
   const handleSendMessage = useCallback(async () => {
-    if (!inputValue.trim() || isLoading) return;
-
     const message = inputValue.trim();
+    if (!message || isLoading) return;
+
     setInputValue('');
     setIsLoading(true);
+    
+    // Show optimistic message immediately
+    setOptimisticMessage(message);
 
     try {
       if (branchingFromNode && onBranchFromNode) {
         await onBranchFromNode(branchingFromNode, message);
         setBranchingFromNode(null);
+        setOptimisticMessage(null);
         toastSuccess('Branch created successfully');
       } else {
-        await onSendMessage(message, activeNodeId);
-        toastSuccess('Message sent successfully');
+        createNodeMutation.mutate({
+          conversationId,
+          parentId: activeNodeId,
+          role: 'user',
+          text: message,
+        }, {
+          onSuccess: (response) => {
+            // Clear optimistic message after a delay to ensure cache updates
+            setTimeout(() => {
+              setOptimisticMessage(null);
+            }, 500);
+            setIsGeneratingAI(true);
+            toastSuccess('Message sent successfully');
+            // Update activeNodeId to the new user node
+            onNodeSelect(response.node.id);
+            // Automatically trigger AI reply after user message
+            const userNodeId = response.node.id;
+            generateAIReplyMutation.mutate(userNodeId, {
+              onSuccess: () => {
+                setIsGeneratingAI(false);
+                toastSuccess('AI response generated');
+              },
+              onError: (error) => {
+                setIsGeneratingAI(false);
+                toastError('Failed to generate AI response');
+                console.error('AI reply error:', error);
+              },
+            });
+          },
+          onError: (error) => {
+            setOptimisticMessage(null);
+            toastError('Failed to send message');
+            console.error('Send message error:', error);
+          },
+        });
       }
     } catch (error) {
+      setOptimisticMessage(null);
       toastError('Failed to send message');
       console.error('Send message error:', error);
     } finally {
@@ -107,7 +178,9 @@ export default function ChatPaneV2({
     isLoading,
     activeNodeId,
     branchingFromNode,
-    onSendMessage,
+    conversationId,
+    createNodeMutation,
+    generateAIReplyMutation,
     onBranchFromNode,
     toastSuccess,
     toastError,
@@ -127,49 +200,59 @@ export default function ChatPaneV2({
   // Handle message editing
   const handleEditMessage = useCallback(
     async (nodeId: string, newText: string) => {
-      try {
-        await onEditNode(nodeId, newText);
-        setEditingNodeId(null);
-        setEditingText('');
-        toastSuccess('Message updated successfully');
-      } catch (error) {
-        toastError('Failed to update message');
-        console.error('Edit message error:', error);
-      }
+      editNodeMutation.mutate(
+        { nodeId, data: { text: newText } },
+        {
+          onSuccess: () => {
+            setEditingNodeId(null);
+            setEditingText('');
+            toastSuccess('Message updated successfully');
+          },
+          onError: (error) => {
+            toastError('Failed to update message');
+            console.error('Edit message error:', error);
+          },
+        }
+      );
     },
-    [onEditNode, toastSuccess, toastError]
+    [editNodeMutation, toastSuccess, toastError]
   );
 
   // Handle message deletion
   const handleDeleteMessage = useCallback(
     async (nodeId: string) => {
-      try {
-        await onDeleteNode(nodeId);
-        setDeleteConfirm(null);
-        toastSuccess('Message deleted successfully');
-      } catch (error) {
-        toastError('Failed to delete message');
-        console.error('Delete message error:', error);
-      }
+      deleteNodeMutation.mutate(nodeId, {
+        onSuccess: () => {
+          setDeleteConfirm(null);
+          toastSuccess('Message deleted successfully');
+        },
+        onError: (error) => {
+          toastError('Failed to delete message');
+          console.error('Delete message error:', error);
+        },
+      });
     },
-    [onDeleteNode, toastSuccess, toastError]
+    [deleteNodeMutation, toastSuccess, toastError]
   );
 
   // Handle AI reply regeneration
   const handleRegenerateReply = useCallback(
     async (nodeId: string) => {
       setIsLoading(true);
-      try {
-        await onRequestAIReply(nodeId);
-        toastSuccess('AI response regenerated');
-      } catch (error) {
-        toastError('Failed to regenerate response');
-        console.error('Regenerate reply error:', error);
-      } finally {
-        setIsLoading(false);
-      }
+      generateAIReplyMutation.mutate(nodeId, {
+        onSuccess: () => {
+          toastSuccess('AI response regenerated');
+        },
+        onError: (error) => {
+          toastError('Failed to regenerate response');
+          console.error('Regenerate reply error:', error);
+        },
+        onSettled: () => {
+          setIsLoading(false);
+        },
+      });
     },
-    [onRequestAIReply, toastSuccess, toastError]
+    [generateAIReplyMutation, toastSuccess, toastError]
   );
 
   // Copy message to clipboard
@@ -188,8 +271,16 @@ export default function ChatPaneV2({
 
   // Render user message
   const renderUserMessage = (chatNode: ChatNodeT) => (
-    <div className="flex justify-end mb-4">
-      <div className="max-w-[90%] sm:max-w-[80%] bg-blue-500 text-white rounded-lg px-3 sm:px-4 py-2 relative group">
+    <motion.div 
+      className="flex justify-end mb-4"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+    >
+      <div 
+        className="max-w-[90%] sm:max-w-[80%] bg-blue-500 text-white rounded-lg px-3 sm:px-4 py-2 relative group cursor-pointer hover:bg-blue-600 transition-colors"
+        onClick={() => onNodeSelect(chatNode.id)}
+      >
         {editingNodeId === chatNode.id ? (
           <div className="space-y-2">
             <textarea
@@ -272,19 +363,27 @@ export default function ChatPaneV2({
           </>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 
   // Render assistant message
   const renderAssistantMessage = (chatNode: ChatNodeT) => (
-    <div className="flex justify-start mb-4">
-      <div className="max-w-[90%] sm:max-w-[80%] bg-gray-100 dark:bg-gray-800 rounded-lg px-3 sm:px-4 py-2 relative group">
+    <motion.div 
+      className="flex justify-start mb-4"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, delay: 0.1 }}
+    >
+      <div 
+        className="max-w-[90%] sm:max-w-[80%] bg-gray-100 dark:bg-gray-800 rounded-lg px-3 sm:px-4 py-2 relative group cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+        onClick={() => onNodeSelect(chatNode.id)}
+      >
         <div className="prose prose-sm max-w-none dark:prose-invert">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             rehypePlugins={[rehypeHighlight]}
           >
-            {chatNode.response || chatNode.assistantText}
+{chatNode.response || chatNode.assistantText}
           </ReactMarkdown>
         </div>
         <div className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 transition-opacity flex space-x-1">
@@ -313,29 +412,8 @@ export default function ChatPaneV2({
           </button>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
-
-  // Filter to show only the active chat path
-  const getActiveChatPath = useCallback(() => {
-    if (!activeNodeId || chatNodes.length === 0) return [];
-
-    const nodeMap = new Map(chatNodes.map(node => [node.id, node]));
-    const path: ChatNodeT[] = [];
-
-    // Start from active node and traverse up to root
-    let currentId: string | null = activeNodeId;
-    while (currentId) {
-      const node = nodeMap.get(currentId);
-      if (!node) break;
-      path.unshift(node); // Add to beginning to maintain order
-      currentId = node.parentId;
-    }
-
-    return path;
-  }, [chatNodes, activeNodeId]);
-
-  const activeChatPath = getActiveChatPath();
 
   return (
     <div
@@ -351,13 +429,41 @@ export default function ChatPaneV2({
           </div>
         ))}
 
-        {isLoading && (
-          <div className="flex justify-start mb-4">
+        {/* Show optimistic user message */}
+        {optimisticMessage && (
+          <motion.div 
+            className="flex justify-end mb-4"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <div className="max-w-[90%] sm:max-w-[80%] bg-blue-500 text-white rounded-lg px-3 sm:px-4 py-2 opacity-70">
+              <div className="prose prose-sm max-w-none text-white">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeHighlight]}
+                >
+                  {optimisticMessage}
+                </ReactMarkdown>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Show AI thinking animation */}
+        {isGeneratingAI && (
+          <motion.div 
+            className="flex justify-start mb-4"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+          >
             <div className="max-w-[80%] bg-gray-100 dark:bg-gray-800 rounded-lg px-4 py-2">
               <LoadingDots />
             </div>
-          </div>
+          </motion.div>
         )}
+
 
         <div ref={messagesEndRef} />
       </div>
@@ -387,40 +493,65 @@ export default function ChatPaneV2({
             </button>
           </div>
         )}
-        <div className="flex space-x-2">
-          <textarea
-            value={inputValue}
-            onChange={e => setInputValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={
-              branchingFromNode
-                ? 'Type your message to create a new branch... (Enter to send, Shift+Enter for new line)'
-                : 'Type your message... (Enter to send, Shift+Enter for new line)'
-            }
-            className={`flex-1 p-2 sm:p-3 border rounded-lg resize-none focus:ring-2 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 text-sm sm:text-base ${
-              branchingFromNode
-                ? 'border-green-300 dark:border-green-600 focus:ring-green-500'
-                : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500'
-            }`}
-            rows={3}
-            disabled={isLoading}
-          />
-          <button
-            onClick={handleSendMessage}
-            disabled={!inputValue.trim() || isLoading}
-            className={`px-3 sm:px-4 py-2 text-white rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center ${
-              branchingFromNode
-                ? 'bg-green-500 hover:bg-green-600'
-                : 'bg-blue-500 hover:bg-blue-600'
-            }`}
-          >
-            {branchingFromNode ? (
-              <GitBranch size={18} className="sm:w-5 sm:h-5" />
-            ) : (
-              <Send size={18} className="sm:w-5 sm:h-5" />
-            )}
-            {isLoading && <div className="animate-pulse" />}
-          </button>
+
+        <div className="p-3 sm:p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+          <div className={`relative flex items-end space-x-2 p-2 rounded-2xl border-2 transition-colors ${
+            branchingFromNode
+              ? 'border-green-300 dark:border-green-600 bg-green-50 dark:bg-green-900/10'
+              : 'border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50'
+          } ${!inputValue.trim() ? '' : 'border-gray-300 dark:border-gray-500'}`}>
+            <textarea
+              value={inputValue}
+              onChange={e => setInputValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={
+                branchingFromNode
+                  ? 'Type your message to create a new branch...'
+                  : 'Message GPTree'
+              }
+              className="flex-1 bg-transparent border-none outline-none resize-none text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 text-sm sm:text-base max-h-32 min-h-[24px] py-1"
+              rows={1}
+              disabled={isLoading}
+              style={{ height: 'auto' }}
+              onInput={(e) => {
+                const target = e.target as HTMLTextAreaElement;
+                target.style.height = 'auto';
+                target.style.height = Math.min(target.scrollHeight, 128) + 'px';
+              }}
+            />
+            <button
+              onClick={handleSendMessage}
+              disabled={!inputValue.trim() || isLoading}
+              className={`p-1.5 rounded-full transition-all duration-200 flex items-center justify-center ${
+                !inputValue.trim() || isLoading
+                  ? 'bg-gray-200 dark:bg-gray-600 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                  : branchingFromNode
+                  ? 'bg-green-500 hover:bg-green-600 text-white shadow-sm hover:shadow-md'
+                  : 'bg-gray-900 dark:bg-white hover:bg-gray-800 dark:hover:bg-gray-100 text-white dark:text-gray-900 shadow-sm hover:shadow-md'
+              }`}
+            >
+              {branchingFromNode ? (
+                <GitBranch size={16} />
+              ) : (
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  className="text-current"
+                >
+                  <path
+                    d="M7 11L12 6L17 11M12 18V7"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              )}
+              {isLoading && <div className="animate-pulse" />}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -449,8 +580,8 @@ export default function ChatPaneV2({
               </p>
               <div className="bg-gray-100 dark:bg-gray-700 p-3 rounded mb-4 max-h-32 overflow-y-auto">
                 <p className="text-sm text-gray-800 dark:text-gray-100">
-                  {deleteConfirm.content.substring(0, 200)}
-                  {deleteConfirm.content.length > 200 && '...'}
+                  {deleteConfirm?.content.substring(0, 200)}
+                  {deleteConfirm?.content.length > 200 && '...'}
                 </p>
               </div>
               <div className="flex space-x-3 justify-end">
@@ -461,7 +592,7 @@ export default function ChatPaneV2({
                   Cancel
                 </button>
                 <button
-                  onClick={() => handleDeleteMessage(deleteConfirm.nodeId)}
+                  onClick={() => deleteConfirm && handleDeleteMessage(deleteConfirm.nodeId)}
                   className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
                 >
                   Delete

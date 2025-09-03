@@ -2,52 +2,56 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSignIn, useSignUp } from '@/hooks/use-conversations';
+import { useToast } from '@/components/Toast';
 
 export default function SignInPage() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const toast = useToast();
+  const signInMutation = useSignIn();
+  const signUpMutation = useSignUp();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setIsLoading(true);
 
-    try {
-      const endpoint = isSignUp ? '/api/auth/signup' : '/api/auth/login';
-      const body = isSignUp
-        ? { email, password, displayName }
-        : { email, password };
+    const mutation = isSignUp ? signUpMutation : signInMutation;
+    const data = isSignUp
+      ? { email, password, displayName }
+      : { email, password };
 
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-
-      if (response.ok) {
+    mutation.mutate(data, {
+      onSuccess: () => {
         router.push('/');
         router.refresh();
-      } else {
-        const data = await response.json();
-        setError(data.error || 'Authentication failed');
-      }
-    } catch {
-      setError('An error occurred. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
+      },
+      onError: (error) => {
+        toast.error(
+          'Authentication Error',
+          error instanceof Error ? error.message : 'Authentication failed'
+        );
+      },
+    });
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
-      <div className="max-w-md w-full space-y-8 p-8 bg-white dark:bg-gray-800 rounded-xl shadow-lg">
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-purple-50 via-blue-50 to-teal-50 dark:from-gray-900 dark:to-gray-800">
+      {/* Background Logo */}
+      <div className="absolute inset-0 flex items-center justify-center opacity-30 dark:opacity-20">
+        <img
+          src="/GPTreeLogo.png"
+          alt="GPTree Logo Background"
+          className="w-9/10 h-9/10 object-contain"
+        />
+      </div>
+      
+      {/* Auth Form */}
+      <div className="relative z-10 max-w-md w-full space-y-8 p-8 bg-white/95 dark:bg-gray-800/95 backdrop-blur-md rounded-xl shadow-xl border border-white/30 dark:border-gray-700/50">
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+       <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
             GPTree
           </h1>
           <h2 className="text-xl text-gray-600 dark:text-gray-300">
@@ -108,16 +112,13 @@ export default function SignInPage() {
             />
           </div>
 
-          {error && (
-            <div className="text-red-600 text-sm text-center">{error}</div>
-          )}
 
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={signInMutation.isPending || signUpMutation.isPending}
             className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
           >
-            {isLoading ? 'Loading...' : isSignUp ? 'Sign Up' : 'Sign In'}
+            {(signInMutation.isPending || signUpMutation.isPending) ? 'Loading...' : isSignUp ? 'Sign Up' : 'Sign In'}
           </button>
 
           <div className="text-center">
@@ -133,6 +134,7 @@ export default function SignInPage() {
           </div>
         </form>
       </div>
+      <toast.ToastContainer />
     </div>
   );
 }

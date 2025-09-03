@@ -17,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Download, Upload, FileText, Code } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
+import { useExportConversation, useImportConversation } from '@/hooks/use-conversations';
 
 interface ExportImportDialogProps {
   conversationId: string;
@@ -30,58 +31,24 @@ export function ExportImportDialog({
   currentNodeId,
 }: ExportImportDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importTitle, setImportTitle] = useState('');
   const { toast } = useToast();
   const router = useRouter();
+  
+  const exportMutation = useExportConversation();
+  const importMutation = useImportConversation();
 
-  const handleExport = async (format: 'json' | 'md') => {
-    setIsExporting(true);
-    try {
-      const params = new URLSearchParams();
-      params.set('format', format);
-      if (currentNodeId) {
-        params.set('node', currentNodeId);
-      }
-
-      const response = await fetch(`/api/export/${conversationId}?${params}`);
-
-      if (!response.ok) {
-        throw new Error('Export failed');
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-
-      const filename = conversationTitle.replace(/[^a-zA-Z0-9]/g, '_');
-      a.download = `${filename}.${format === 'md' ? 'md' : 'json'}`;
-
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-
-      toast({
-        title: 'Export successful',
-        description: `Conversation exported as ${format.toUpperCase()}`,
-      });
-    } catch (error) {
-      console.error('Export error:', error);
-      toast({
-        title: 'Export failed',
-        description: 'Failed to export conversation',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsExporting(false);
-    }
+  const handleExport = (format: 'json' | 'md') => {
+    exportMutation.mutate({
+      conversationId,
+      format,
+      nodeId: currentNodeId,
+      filename: conversationTitle.replace(/[^a-zA-Z0-9]/g, '_'),
+    });
   };
 
-  const handleImport = async () => {
+  const handleImport = () => {
     if (!importFile) {
       toast({
         title: 'No file selected',
@@ -91,46 +58,20 @@ export function ExportImportDialog({
       return;
     }
 
-    setIsImporting(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', importFile);
-      if (importTitle) {
-        formData.append('title', importTitle);
+    importMutation.mutate(
+      { file: importFile },
+      {
+        onSuccess: (result) => {
+          toast({
+            title: 'Import successful',
+            description: `Imported ${result.nodesImported} nodes`,
+          });
+          // Navigate to the imported conversation
+          router.push(`/c/${result.conversationId}`);
+          setIsOpen(false);
+        },
       }
-
-      const response = await fetch('/api/import', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Import failed');
-      }
-
-      toast({
-        title: 'Import successful',
-        description: `Imported ${result.nodesImported} nodes`,
-      });
-
-      // Navigate to the imported conversation
-      router.push(`/chat/${result.conversationId}`);
-      setIsOpen(false);
-    } catch (error) {
-      console.error('Import error:', error);
-      toast({
-        title: 'Import failed',
-        description:
-          error instanceof Error
-            ? error.message
-            : 'Failed to import conversation',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsImporting(false);
-    }
+    );
   };
 
   return (
@@ -162,7 +103,7 @@ export function ExportImportDialog({
                 <Button
                   variant="outline"
                   onClick={() => handleExport('json')}
-                  disabled={isExporting}
+                  disabled={exportMutation.isPending}
                   className="h-20 flex-col"
                 >
                   <Code className="w-6 h-6 mb-2" />
@@ -174,7 +115,7 @@ export function ExportImportDialog({
                 <Button
                   variant="outline"
                   onClick={() => handleExport('md')}
-                  disabled={isExporting}
+                  disabled={exportMutation.isPending}
                   className="h-20 flex-col"
                 >
                   <FileText className="w-6 h-6 mb-2" />
@@ -220,10 +161,10 @@ export function ExportImportDialog({
             <DialogFooter>
               <Button
                 onClick={handleImport}
-                disabled={!importFile || isImporting}
+                disabled={!importFile || importMutation.isPending}
               >
                 <Upload className="w-4 h-4 mr-2" />
-                {isImporting ? 'Importing...' : 'Import'}
+                {importMutation.isPending ? 'Importing...' : 'Import'}
               </Button>
             </DialogFooter>
           </TabsContent>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -32,6 +32,7 @@ import {
   Calendar,
   MessageSquare,
 } from 'lucide-react';
+import { useAccountInfo, useUpdateAccount, useDeleteAccount } from '@/hooks/use-conversations';
 
 interface AccountInfo {
   id: string;
@@ -42,11 +43,6 @@ interface AccountInfo {
 }
 
 export default function AccountPage() {
-  const [accountInfo, setAccountInfo] = useState<AccountInfo | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-
   // Form state
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
@@ -57,34 +53,24 @@ export default function AccountPage() {
   const { toast } = useToast();
   const router = useRouter();
 
-  const fetchAccountInfo = useCallback(async () => {
-    try {
-      const response = await fetch('/api/account');
-      if (response.ok) {
-        const data = await response.json();
-        setAccountInfo(data);
-        setDisplayName(data.displayName || '');
-        setEmail(data.email);
-      } else if (response.status === 401) {
-        router.push('/auth/login');
-      } else {
-        throw new Error('Failed to fetch account info');
-      }
-    } catch (error) {
-      console.error('Error fetching account info:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load account information',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [toast, router]);
+  // TanStack Query hooks
+  const { data: accountInfo, isLoading: loading, error } = useAccountInfo();
+  const updateAccountMutation = useUpdateAccount();
+  const deleteAccountMutation = useDeleteAccount();
 
+  // Initialize form fields when account info loads
   useEffect(() => {
-    fetchAccountInfo();
-  }, [fetchAccountInfo]);
+    if (accountInfo) {
+      setDisplayName(accountInfo.displayName || '');
+      setEmail(accountInfo.email);
+    }
+  }, [accountInfo]);
+
+  // Handle authentication errors
+  if (error && 'status' in error && error.status === 401) {
+    router.push('/auth/login');
+    return null;
+  }
 
   const handlePasswordSubmit = async (
     e?: React.FormEvent<HTMLFormElement> | React.MouseEvent<HTMLButtonElement>
@@ -108,88 +94,59 @@ export default function AccountPage() {
       return;
     }
 
-    setSaving(true);
-    try {
-      const updateData: {
-        displayName: string;
-        email: string;
-        currentPassword?: string;
-        newPassword?: string;
-      } = {
-        displayName,
-        email,
-      };
+    const updateData: {
+      displayName: string;
+      email: string;
+      currentPassword?: string;
+      newPassword?: string;
+    } = {
+      displayName,
+      email,
+    };
 
-      if (newPassword) {
-        updateData.currentPassword = currentPassword;
-        updateData.newPassword = newPassword;
-      }
+    if (newPassword) {
+      updateData.currentPassword = currentPassword;
+      updateData.newPassword = newPassword;
+    }
 
-      const response = await fetch('/api/account', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updateData),
-      });
-
-      const result = await response.json();
-
-      if (response.ok) {
+    updateAccountMutation.mutate(updateData, {
+      onSuccess: () => {
         toast({
           title: 'Account updated',
           description: 'Your account information has been saved',
         });
-
         // Clear password fields
         setCurrentPassword('');
         setNewPassword('');
         setConfirmPassword('');
-
-        // Refresh account info
-        await fetchAccountInfo();
-      } else {
-        throw new Error(result.error || 'Failed to update account');
-      }
-    } catch (error) {
-      console.error('Error updating account:', error);
-      toast({
-        title: 'Update failed',
-        description:
-          error instanceof Error ? error.message : 'Failed to update account',
-        variant: 'destructive',
-      });
-    } finally {
-      setSaving(false);
-    }
+      },
+      onError: (error: Error) => {
+        toast({
+          title: 'Error',
+          description: error.message || 'Failed to update account',
+          variant: 'destructive',
+        });
+      },
+    });
   };
 
   const handleDeleteAccount = async () => {
-    setDeleting(true);
-    try {
-      const response = await fetch('/api/account', {
-        method: 'DELETE',
-      });
-
-      if (response.ok) {
+    deleteAccountMutation.mutate(undefined, {
+      onSuccess: () => {
         toast({
           title: 'Account deleted',
           description: 'Your account has been permanently deleted',
         });
         router.push('/');
-      } else {
-        throw new Error('Failed to delete account');
-      }
-    } catch (error) {
-      console.error('Error deleting account:', error);
-      toast({
-        title: 'Deletion failed',
-        description: 'Failed to delete account',
-        variant: 'destructive',
-      });
-    } finally {
-      setDeleting(false);
-    }
+      },
+      onError: (error: any) => {
+        toast({
+          title: 'Deletion failed',
+          description: error?.message || 'Failed to delete account',
+          variant: 'destructive',
+        });
+      },
+    });
   };
 
   if (loading) {
@@ -389,11 +346,11 @@ export default function AccountPage() {
           <div className="flex flex-col sm:flex-row justify-between pt-4 border-t border-gray-200 dark:border-gray-600 space-y-3 sm:space-y-0">
             <Button
               onClick={handlePasswordSubmit}
-              disabled={saving}
+              disabled={updateAccountMutation.isPending}
               className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white px-6"
             >
               <Save className="w-4 h-4 mr-2" />
-              {saving ? 'Saving...' : 'Save Changes'}
+              {updateAccountMutation.isPending ? 'Saving...' : 'Save Changes'}
             </Button>
 
             <AlertDialog>
@@ -419,10 +376,10 @@ export default function AccountPage() {
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={handleDeleteAccount}
-                    disabled={deleting}
+                    disabled={deleteAccountMutation.isPending}
                     className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
                   >
-                    {deleting ? 'Deleting...' : 'Delete Account'}
+                    {deleteAccountMutation.isPending ? 'Deleting...' : 'Delete Account'}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>

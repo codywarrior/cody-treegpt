@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Share2, Copy, Trash2, Plus, ExternalLink, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useShareConversation, useShareTokens, useRevokeShareToken } from '@/hooks/use-conversations';
 
 interface ShareToken {
   token: string;
@@ -39,79 +40,29 @@ export function ShareDialog({
   currentNodeId,
 }: ShareDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [tokens, setTokens] = useState<ShareToken[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [creating, setCreating] = useState(false);
   const [expiryDays, setExpiryDays] = useState(30);
   const { toast } = useToast();
 
-  const fetchTokens = useCallback(async () => {
-    setLoading(true);
-    try {
-      const response = await fetch(
-        `/api/share?conversationId=${conversationId}`
-      );
-      if (response.ok) {
-        const data = await response.json();
-        setTokens(data.tokens);
-      }
-    } catch (error) {
-      console.error('Error fetching tokens:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [conversationId]);
+  const { data: tokens = [], isLoading: loading } = useShareTokens(conversationId, isOpen);
+  const shareConversationMutation = useShareConversation();
+  const revokeTokenMutation = useRevokeShareToken();
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchTokens();
-    }
-  }, [isOpen, fetchTokens]);
-
-  const createShareLink = async (includeCurrentNode: boolean = false) => {
-    setCreating(true);
-    try {
-      const response = await fetch('/api/share', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+  const createShareLink = (includeCurrentNode: boolean = false) => {
+    shareConversationMutation.mutate(
+      {
+        conversationId,
+        nodeId: includeCurrentNode ? currentNodeId : undefined,
+        expiresInDays: expiryDays,
+      },
+      {
+        onSuccess: () => {
+          toast({
+            title: 'Share link created',
+            description: 'Link copied to clipboard',
+          });
         },
-        body: JSON.stringify({
-          conversationId,
-          nodeId: includeCurrentNode ? currentNodeId : undefined,
-          expiresInDays: expiryDays,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        toast({
-          title: 'Share link created',
-          description: 'Link copied to clipboard',
-        });
-
-        // Copy to clipboard
-        await navigator.clipboard.writeText(data.url);
-
-        // Refresh tokens list
-        await fetchTokens();
-      } else {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to create share link');
       }
-    } catch (error) {
-      console.error('Error creating share link:', error);
-      toast({
-        title: 'Error',
-        description:
-          error instanceof Error
-            ? error.message
-            : 'Failed to create share link',
-        variant: 'destructive',
-      });
-    } finally {
-      setCreating(false);
-    }
+    );
   };
 
   const copyToClipboard = async (url: string) => {
@@ -131,33 +82,22 @@ export function ShareDialog({
     }
   };
 
-  const revokeToken = async (token: string) => {
-    try {
-      const response = await fetch('/api/share', {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ token }),
-      });
-
-      if (response.ok) {
+  const revokeToken = (token: string) => {
+    revokeTokenMutation.mutate(token, {
+      onSuccess: () => {
         toast({
-          title: 'Link revoked',
+          title: 'Token revoked',
           description: 'Share link has been disabled',
         });
-        await fetchTokens();
-      } else {
-        throw new Error('Failed to revoke link');
-      }
-    } catch (error) {
-      console.error('Error revoking token:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to revoke link',
-        variant: 'destructive',
-      });
-    }
+      },
+      onError: () => {
+        toast({
+          title: 'Error',
+          description: 'Failed to revoke token',
+          variant: 'destructive',
+        });
+      },
+    });
   };
 
   const formatDate = (dateString: string) => {
@@ -218,24 +158,21 @@ export function ShareDialog({
             <div className="grid grid-cols-1 gap-2">
               <Button
                 onClick={() => createShareLink(false)}
-                disabled={creating}
-                className="justify-start"
+                disabled={shareConversationMutation.isPending}
+                className="flex-1"
               >
                 <Plus className="w-4 h-4 mr-2" />
-                Share Full Conversation
+                Create Link
               </Button>
-
-              {currentNodeId && (
-                <Button
-                  onClick={() => createShareLink(true)}
-                  disabled={creating}
-                  variant="outline"
-                  className="justify-start"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Share Path to Current Message
-                </Button>
-              )}
+              <Button
+                onClick={() => createShareLink(true)}
+                disabled={!currentNodeId || shareConversationMutation.isPending}
+                variant="outline"
+                className="flex-1"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Share Path to Current Message
+              </Button>
             </div>
           </div>
 
@@ -267,7 +204,7 @@ export function ShareDialog({
               </div>
             ) : (
               <div className="space-y-3 max-h-64 overflow-y-auto">
-                {tokens.map(token => (
+                {tokens.map((token: any) => (
                   <div
                     key={token.token}
                     className="flex items-center gap-3 p-3 border rounded-lg"

@@ -279,7 +279,7 @@ export default function Graph({
       .attr('y', -10)
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'middle')
-      .attr('font-size', '10px')
+      .attr('font-size', '12px')
       .attr('font-weight', 'bold')
       .attr('fill', (d: GraphNode) => {
         const isActive = activeNodeId === d.id;
@@ -301,7 +301,7 @@ export default function Graph({
       .attr('y', 15)
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'middle')
-      .attr('font-size', '9px')
+      .attr('font-size', '11px')
       .attr('fill', (d: GraphNode) => {
         const isActive = activeNodeId === d.id;
         const isDark = document.documentElement.classList.contains('dark');

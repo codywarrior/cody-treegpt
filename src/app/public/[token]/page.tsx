@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import {
   Card,
@@ -16,6 +15,7 @@ import { Clock, User, Bot, Eye } from 'lucide-react';
 import { ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import { NodeT } from '@/lib/types';
+import { usePublicShareData } from '@/hooks/use-conversations';
 
 interface PublicTokenData {
   conversation: {
@@ -35,33 +35,7 @@ export default function PublicSharePage() {
   const params = useParams();
   const token = params.token as string;
 
-  const [data, setData] = useState<PublicTokenData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchPublicData = useCallback(async () => {
-    try {
-      const response = await fetch(`/api/public/${token}`);
-
-      if (response.ok) {
-        const result = await response.json();
-        setData(result);
-      } else if (response.status === 404) {
-        setError('This sharing link has expired or does not exist.');
-      } else {
-        setError('Failed to load shared content.');
-      }
-    } catch (error) {
-      console.error('Error fetching public data:', error);
-      setError('Failed to load shared content.');
-    } finally {
-      setLoading(false);
-    }
-  }, [token]);
-
-  useEffect(() => {
-    fetchPublicData();
-  }, [fetchPublicData]);
+  const { data, isLoading, error } = usePublicShareData(token);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -97,7 +71,7 @@ export default function PublicSharePage() {
       );
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="container max-w-4xl mx-auto py-8">
         <div className="space-y-6">
@@ -117,7 +91,7 @@ export default function PublicSharePage() {
               <div className="text-6xl">🔗</div>
               <h2 className="text-2xl font-semibold">Link Not Found</h2>
               <p className="text-muted-foreground max-w-md mx-auto">
-                {error || 'This sharing link has expired or does not exist.'}
+                {error?.message || 'This sharing link has expired or does not exist.'}
               </p>
               <Button asChild>
                 <Link href="/">

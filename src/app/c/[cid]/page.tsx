@@ -14,16 +14,28 @@ import {
   createNewChatNode,
 } from '@/lib/chat-utils';
 import { NodeT, ChatNodeT, ConversationT } from '@/lib/types';
+import { useConversationDetail, useExportConversation, useShareConversation, useImportConversation } from '@/hooks/use-conversations';
+import { useCreateNode, useEditNode, useDeleteNode, useGenerateAIReply } from '@/hooks/use-nodes';
 
 export default function ConversationPage() {
   const params = useParams();
   const router = useRouter();
   const cid = params.cid as string;
 
-  const [conversation, setConversation] = useState<ConversationT | null>(null);
-  const [nodes, setNodes] = useState<NodeT[]>([]);
   const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  
+  // TanStack Query hooks
+  const { data: conversationData, isLoading } = useConversationDetail(cid);
+  const createNodeMutation = useCreateNode();
+  const editNodeMutation = useEditNode();
+  const deleteNodeMutation = useDeleteNode();
+  const generateAIReplyMutation = useGenerateAIReply();
+  const exportConversationMutation = useExportConversation();
+  const shareConversationMutation = useShareConversation();
+  const importConversationMutation = useImportConversation();
+  
+  const conversation = conversationData?.conversation || null;
+  const nodes = conversationData?.nodes || [];
   const [shareModal, setShareModal] = useState<{
     isOpen: boolean;
     url: string;
@@ -42,267 +54,117 @@ export default function ConversationPage() {
   const chatNodes = useMemo(() => convertNodesToChatNodes(nodes), [nodes]);
   const activePath = useMemo(
     () => getChatActivePath(chatNodes, activeNodeId),
-    []
+    [chatNodes, activeNodeId]
   );
 
-  const loadConversation = useCallback(async () => {
-    try {
-      const response = await fetch(`/api/conversations/${cid}`);
-      if (response.ok) {
-        const data = await response.json();
-        setConversation(data.conversation);
-        setNodes(data.nodes);
-
-        // Set active node to the last node in the conversation for initial display
-        const convertedChatNodes = convertNodesToChatNodes(data.nodes);
-        const lastNode =
-          convertedChatNodes.length > 0
-            ? convertedChatNodes[convertedChatNodes.length - 1]
-            : null;
-        setActiveNodeId(lastNode?.id || data.rootNodeId);
-      } else if (response.status === 404) {
-        router.push('/');
-      }
-    } catch (error) {
-      console.error('Failed to load conversation:', error);
-      router.push('/');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [cid, router]);
-
+  // Set active node when conversation data loads
   useEffect(() => {
-    loadConversation();
-  }, [loadConversation]);
+    if (conversationData && !activeNodeId) {
+      const convertedChatNodes = convertNodesToChatNodes(conversationData.nodes);
+      const lastNode =
+        convertedChatNodes.length > 0
+          ? convertedChatNodes[convertedChatNodes.length - 1]
+          : null;
+      setActiveNodeId(lastNode?.id || conversationData.rootNodeId);
+    }
+  }, [conversationData, activeNodeId]);
 
   const handleSendMessage = async (text: string, parentId: string | null) => {
-    try {
-      // Create new chat node with user query
-      const newChatNode = createNewChatNode(text, parentId, cid);
-
-      // Create user node in database first
-      const response = await fetch('/api/nodes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          conversationId: cid,
-          parentId,
-          role: 'user',
-          text,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const userNode = data.node;
-
-        // Add to nodes state (chatNodes will update via useMemo)
-        setNodes(prev => [...prev, userNode]);
-        setActiveNodeId(userNode.id);
-
-        // Pass the chat node directly to avoid timing issues
-        handleRequestAIReply(userNode.id, newChatNode);
-      } else {
-        throw new Error(`Failed to create node: ${response.status}`);
+    createNodeMutation.mutate(
+      {
+        conversationId: cid,
+        parentId,
+        role: 'user',
+        text,
+      },
+      {
+        onSuccess: (data) => {
+          const userNode = data.node;
+          setActiveNodeId(userNode.id);
+          // Automatically trigger AI reply
+          generateAIReplyMutation.mutate(userNode.id, {
+            onSuccess: (aiResponse) => {
+              // Update activeNodeId to the AI response node to show the full conversation
+              if (aiResponse.node) {
+                setActiveNodeId(aiResponse.node.id);
+              }
+            },
+          });
+        },
+        onError: (error) => {
+          toast.error('Failed to send message', error.message);
+        },
       }
-    } catch (error) {
-      console.error('Failed to send message:', error);
-    }
+    );
   };
 
   const handleBranchFromNode = async (nodeId: string, text: string) => {
-    try {
-      // Create new chat node for branching
-      const newChatNode = createNewChatNode(text, nodeId, cid);
-
-      const response = await fetch('/api/nodes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          conversationId: cid,
-          parentId: nodeId,
-          role: 'user',
-          text,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const newNode = data.node;
-
-        // Update nodes state (chatNodes will update via useMemo)
-        setNodes(prev => [...prev, newNode]);
-        setActiveNodeId(newNode.id);
-
-        // Request AI reply for the branch
-        handleRequestAIReply(newNode.id, newChatNode);
-      }
-    } catch (error) {
-      console.error('Failed to create branch:', error);
-    }
-  };
-
-  const handleRequestAIReply = async (
-    userNodeId: string,
-    chatNode?: ChatNodeT
-  ) => {
-    try {
-      // If no chat node provided, try to find it (for existing calls from ChatPaneV2)
-      let targetChatNode = chatNode;
-      if (!targetChatNode) {
-        const userNode = nodes.find(n => n.id === userNodeId);
-        if (!userNode) {
-          console.error('Could not find user node with ID:', userNodeId);
-          return;
-        }
-        // Find chat node by matching the user node ID directly
-        targetChatNode = chatNodes.find(cn => cn.id === userNodeId);
-        if (!targetChatNode) {
-          console.error(
-            'Could not find corresponding chat node for user node:',
-            userNodeId
-          );
-          return;
-        }
-      }
-
-      // For retries, remove any existing assistant node for this parent
-      setNodes(prev =>
-        prev.filter(n => !(n.parentId === userNodeId && n.role === 'assistant'))
-      );
-
-      const response = await fetch(`/api/nodes/${userNodeId}/ai-reply`, {
-        method: 'POST',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to request AI reply');
-      }
-
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let aiNode: NodeT | null = null;
-      let streamingText = '';
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          const chunk = decoder.decode(value);
-          const lines = chunk.split('\n');
-
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try {
-                const data = JSON.parse(line.slice(6));
-
-                if (data.type === 'node') {
-                  aiNode = data.node;
-                  setNodes(prev => {
-                    // Remove any existing assistant node for this parent (in case of retry)
-                    const filtered = prev.filter(
-                      n =>
-                        !(n.parentId === userNodeId && n.role === 'assistant')
-                    );
-                    const updated = [...filtered, aiNode!];
-                    return updated;
-                  });
-                } else if (data.type === 'content' && aiNode) {
-                  streamingText += data.content;
-                  const aiNodeId = aiNode.id;
-                  setNodes(prev =>
-                    prev.map(node =>
-                      node.id === aiNodeId
-                        ? { ...node, text: streamingText }
-                        : node
-                    )
-                  );
-                } else if (data.type === 'complete' && aiNode) {
-                  const aiNodeId = aiNode.id;
-                  setNodes(prev =>
-                    prev.map(node =>
-                      node.id === aiNodeId
-                        ? { ...node, text: data.node.text }
-                        : node
-                    )
-                  );
-                } else if (data.type === 'error') {
-                  console.error('Streaming error:', data.error);
-                }
-              } catch {
-                // Ignore malformed JSON
+    createNodeMutation.mutate(
+      {
+        conversationId: cid,
+        parentId: nodeId,
+        role: 'user',
+        text,
+      },
+      {
+        onSuccess: (data) => {
+          const newNode = data.node;
+          setActiveNodeId(newNode.id);
+          // Automatically trigger AI reply
+          generateAIReplyMutation.mutate(newNode.id, {
+            onSuccess: (aiResponse) => {
+              // Update activeNodeId to the AI response node to show the full conversation
+              if (aiResponse.node) {
+                setActiveNodeId(aiResponse.node.id);
               }
-            }
-          }
-        }
+            },
+          });
+        },
+        onError: (error) => {
+          toast.error('Failed to create branch', error.message);
+        },
       }
-    } catch (error) {
-      console.error('Failed to request AI reply:', error);
-    }
+    );
   };
+
 
   const handleDeleteNode = async (nodeId: string) => {
-    try {
-      // Find the deleted node before deletion for active node logic
-      const deletedNode = nodes.find(n => n.id === nodeId);
+    // Find the deleted node before deletion for active node logic
+    const deletedNode = nodes.find(n => n.id === nodeId);
 
-      const response = await fetch(`/api/nodes/${nodeId}/delete`, {
-        method: 'DELETE',
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-
-        // Update local state by filtering out all deleted nodes
-        const deletedIds = new Set(result.deletedIds || [nodeId]);
-        const updatedNodes = nodes.filter(n => !deletedIds.has(n.id));
-        setNodes(updatedNodes);
-
+    deleteNodeMutation.mutate(nodeId, {
+      onSuccess: () => {
         // Reset active node if the deleted node was active
         if (deletedNode && activeNodeId === nodeId) {
           // Find a suitable replacement node (parent or first available)
           const parentNode = deletedNode.parentId
-            ? updatedNodes.find(n => n.id === deletedNode.parentId)
-            : updatedNodes.find(n => n.role === 'user');
+            ? nodes.find(n => n.id === deletedNode.parentId)
+            : nodes.find(n => n.role === 'user');
 
           if (parentNode) {
             setActiveNodeId(parentNode.id);
-          } else if (updatedNodes.length > 0) {
-            setActiveNodeId(updatedNodes[0].id);
+          } else if (nodes.length > 1) {
+            setActiveNodeId(nodes[0].id);
           } else {
             setActiveNodeId(null);
           }
         }
-      } else {
-        console.error('Delete failed:', response.status, response.statusText);
-      }
-    } catch (error) {
-      console.error('Failed to delete node:', error);
-    }
+      },
+      onError: (error) => {
+        toast.error('Failed to delete node', (error as Error).message);
+      },
+    });
   };
 
   const handleEditNode = async (nodeId: string, newText: string) => {
-    try {
-      const response = await fetch(`/api/nodes/${nodeId}/edit`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: newText }),
-      });
-
-      if (response.ok) {
-        // Update the local state immediately for better UX
-        setNodes(prevNodes =>
-          prevNodes.map(node =>
-            node.id === nodeId ? ({ ...node, text: newText } as NodeT) : node
-          )
-        );
-      } else {
-        throw new Error('Failed to update node');
+    editNodeMutation.mutate(
+      { nodeId, data: { text: newText } },
+      {
+        onError: (error) => {
+          toast.error('Failed to edit node', (error as Error).message);
+        },
       }
-    } catch (error) {
-      console.error('Failed to edit node:', error);
-    }
+    );
   };
 
   if (isLoading) {
@@ -395,47 +257,32 @@ export default function ConversationPage() {
                 Import
               </label>
               <button
-                onClick={async () => {
-                  try {
-                    const response = await fetch(
-                      `/api/export/${conversation.id}`
-                    );
-                    const blob = await response.blob();
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `${conversation.title}.json`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  } catch (error) {
-                    console.error('Export failed:', error);
-                  }
+                onClick={() => {
+                  exportConversationMutation.mutate({ conversationId: conversation.id });
                 }}
-                className="px-2 md:px-3 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
+                disabled={exportConversationMutation.isPending}
+                className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
               >
-                Export
+                {exportConversationMutation.isPending ? 'Exporting...' : 'Export'}
               </button>
               <button
-                onClick={async () => {
-                  try {
-                    const response = await fetch('/api/share', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        conversationId: conversation.id,
-                        nodeId: activeNodeId,
-                        activePathOnly: true,
-                      }),
-                    });
-                    const { url } = await response.json();
-                    setShareModal({ isOpen: true, url });
-                  } catch (error) {
-                    console.error('Share failed:', error);
-                  }
+                onClick={() => {
+                  shareConversationMutation.mutate(
+                    { conversationId: conversation.id },
+                    {
+                      onSuccess: (data) => {
+                        setShareModal({ isOpen: true, url: data.url });
+                      },
+                      onError: (error) => {
+                        toast.error('Share failed', (error as Error).message);
+                      },
+                    }
+                  );
                 }}
-                className="px-2 md:px-3 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600"
+                disabled={shareConversationMutation.isPending}
+                className="px-2 md:px-3 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600 disabled:opacity-50"
               >
-                Share
+                {shareConversationMutation.isPending ? 'Sharing...' : 'Share'}
               </button>
             </div>
           </div>
@@ -455,15 +302,12 @@ export default function ConversationPage() {
           <ChatPaneV2
             chatNodes={chatNodes}
             activeNodeId={activeNodeId || ''}
-            onSendMessage={handleSendMessage}
+            conversationId={cid}
             onBranchFromNode={handleBranchFromNode}
             onNodeSelect={(nodeId: string) => {
               // Keep the ChatPane display as-is, just update active node for graph highlighting
               setActiveNodeId(nodeId);
             }}
-            onEditNode={handleEditNode}
-            onDeleteNode={handleDeleteNode}
-            onRequestAIReply={handleRequestAIReply}
             className="h-full"
           />
         </div>
@@ -514,29 +358,21 @@ export default function ConversationPage() {
             </p>
             <div className="space-y-3 mb-6">
               <button
-                onClick={async () => {
+                onClick={() => {
                   if (!importModal.file) return;
 
-                  try {
-                    const formData = new FormData();
-                    formData.append('file', importModal.file);
-                    formData.append('conversationId', conversation.id);
-
-                    const response = await fetch('/api/import', {
-                      method: 'POST',
-                      body: formData,
-                    });
-
-                    if (response.ok) {
-                      setImportModal({ isOpen: false, file: null });
-                      window.location.reload();
-                    } else {
-                      alert('Import failed');
+                  importConversationMutation.mutate(
+                    { file: importModal.file, conversationId: conversation.id },
+                    {
+                      onSuccess: () => {
+                        setImportModal({ isOpen: false, file: null });
+                        toast.success('Import successful', 'Conversation imported successfully');
+                      },
+                      onError: (error) => {
+                        toast.error('Import failed', (error as Error).message);
+                      },
                     }
-                  } catch (error) {
-                    console.error('Import failed:', error);
-                    alert('Import failed');
-                  }
+                  );
                 }}
                 className="w-full p-3 text-left bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors"
               >
@@ -548,29 +384,22 @@ export default function ConversationPage() {
                 </div>
               </button>
               <button
-                onClick={async () => {
+                onClick={() => {
                   if (!importModal.file) return;
 
-                  try {
-                    const formData = new FormData();
-                    formData.append('file', importModal.file);
-
-                    const response = await fetch('/api/import', {
-                      method: 'POST',
-                      body: formData,
-                    });
-
-                    if (response.ok) {
-                      const result = await response.json();
-                      setImportModal({ isOpen: false, file: null });
-                      router.push(`/c/${result.conversationId}`);
-                    } else {
-                      alert('Import failed');
+                  importConversationMutation.mutate(
+                    { file: importModal.file },
+                    {
+                      onSuccess: (result) => {
+                        setImportModal({ isOpen: false, file: null });
+                        router.push(`/c/${result.conversationId}`);
+                        toast.success('Import successful', 'New conversation created');
+                      },
+                      onError: (error) => {
+                        toast.error('Import failed', (error as Error).message);
+                      },
                     }
-                  } catch (error) {
-                    console.error('Import failed:', error);
-                    alert('Import failed');
-                  }
+                  );
                 }}
                 className="w-full p-3 text-left bg-green-50 hover:bg-green-100 rounded-lg border border-green-200 transition-colors"
               >

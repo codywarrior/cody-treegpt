@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Plus,
@@ -8,24 +8,21 @@ import {
   Edit2,
   Trash2,
   Search,
-  ChevronDown,
 } from 'lucide-react';
 import { Tooltip } from '@/components/Tooltip';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import Link from 'next/link';
 
-import { ConversationT, UserT } from '@/lib/types';
+import { ConversationT } from '@/lib/types';
 import { useToast } from '@/components/Toast';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { useConversations, useCreateConversation, useUpdateConversation, useDeleteConversation, useLogout } from '@/hooks/use-conversations';
+import { useCurrentUser } from '@/hooks/use-auth';
 
 export default function Home() {
-  const [user, setUser] = useState<UserT | null>(null);
-  const [conversations, setConversations] = useState<ConversationT[]>([]);
   const [filteredConversations, setFilteredConversations] = useState<
     ConversationT[]
   >([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isCreating, setIsCreating] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
@@ -39,34 +36,27 @@ export default function Home() {
   const toast = useToast();
   const router = useRouter();
 
-  const checkAuth = useCallback(async () => {
-    try {
-      const response = await fetch('/api/me');
-      if (response.ok) {
-        const data = await response.json();
-        setUser(data.user);
-      } else {
-        router.push('/auth/signin');
-      }
-    } catch {
-      router.push('/auth/signin');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [router]);
+  // TanStack Query hooks
+  const { data: userData, isLoading: userLoading } = useCurrentUser();
+  const { data: conversationsData, isLoading: conversationsLoading } = useConversations();
+  const createConversationMutation = useCreateConversation();
+  const updateConversationMutation = useUpdateConversation();
+  const deleteConversationMutation = useDeleteConversation();
+  const logoutMutation = useLogout();
 
-  const loadConversations = useCallback(async () => {
-    try {
-      const response = await fetch('/api/conversations');
-      if (response.ok) {
-        const data = await response.json();
-        setConversations(data.conversations);
-        setFilteredConversations(data.conversations);
-      }
-    } catch (error) {
-      console.error('Failed to load conversations:', error);
+  const user = userData?.user || null;
+  const conversations = useMemo(() => 
+    (conversationsData?.conversations || []) as ConversationT[], 
+    [conversationsData?.conversations]
+  );
+  const isLoading = userLoading || conversationsLoading;
+
+  // Redirect to auth if not authenticated
+  useEffect(() => {
+    if (!userLoading && !user) {
+      router.push('/auth/signin');
     }
-  }, []);
+  }, [user, userLoading, router]);
 
   // Filter conversations based on search query
   useEffect(() => {
@@ -81,48 +71,26 @@ export default function Home() {
     setCurrentPage(1); // Reset to first page when searching
   }, [conversations, searchQuery]);
 
-  useEffect(() => {
-    const init = async () => {
-      await checkAuth();
-      await loadConversations();
-    };
-    init();
-  }, [checkAuth, loadConversations]);
-
   const createConversation = async () => {
     if (!newTitle.trim()) return;
 
-    setIsCreating(true);
-    try {
-      const response = await fetch('/api/conversations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: newTitle.trim() }),
-      });
-
-      if (response.ok) {
-        const { conversation } = await response.json();
-        setNewTitle('');
-        toast.success('Conversation created');
-        router.push(`/c/${conversation.id}`);
-      } else {
-        toast.error('Failed to create conversation');
+    createConversationMutation.mutate(
+      { title: newTitle.trim() },
+      {
+        onSuccess: (response) => {
+          setNewTitle('');
+          router.push(`/c/${response.conversation.id}`);
+        },
       }
-    } catch (error) {
-      console.error('Failed to create conversation:', error);
-      toast.error('Failed to create conversation');
-    } finally {
-      setIsCreating(false);
-    }
+    );
   };
 
   const handleLogout = async () => {
-    try {
-      await fetch('/api/auth/logout', { method: 'POST' });
-      router.push('/auth/signin');
-    } catch (error) {
-      console.error('Logout failed:', error);
-    }
+    logoutMutation.mutate(undefined, {
+      onSuccess: () => {
+        router.push('/auth/signin');
+      },
+    });
   };
 
   const handleEditConversation = (conversation: ConversationT) => {
@@ -130,37 +98,18 @@ export default function Home() {
     setEditTitle(conversation.title);
   };
 
-  const updateConversationTitle = async (id: string, title: string) => {
-    try {
-      const response = await fetch(`/api/conversations/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title }),
-      });
-
-      if (response.ok) {
-        toast.success('Conversation updated');
-        // Update local state immediately for better UX
-        const updatedConversations = conversations.map(c =>
-          c.id === editingId ? { ...c, title: editTitle } : c
-        );
-        setConversations(updatedConversations);
-        setFilteredConversations(updatedConversations);
-        setEditingId(null);
-        setEditTitle('');
-      } else {
-        toast.error('Failed to update conversation');
-      }
-    } catch (error) {
-      console.error('Failed to update conversation:', error);
-      toast.error('Failed to update conversation');
-    }
-  };
-
   const saveEditConversation = async () => {
     if (!editingId || !editTitle.trim()) return;
 
-    await updateConversationTitle(editingId, editTitle);
+    updateConversationMutation.mutate(
+      { id: editingId, data: { title: editTitle.trim() } },
+      {
+        onSuccess: () => {
+          setEditingId(null);
+          setEditTitle('');
+        },
+      }
+    );
   };
 
   const deleteConversation = (id: string, title: string) => {
@@ -170,27 +119,11 @@ export default function Home() {
   const confirmDelete = async () => {
     if (!deleteConfirm) return;
 
-    try {
-      const response = await fetch(`/api/conversations/${deleteConfirm.id}`, {
-        method: 'DELETE',
-      });
-
-      if (response.ok) {
-        toast.success('Conversation deleted');
-        const updatedConversations = conversations.filter(
-          c => c.id !== deleteConfirm.id
-        );
-        setConversations(updatedConversations);
-        setFilteredConversations(updatedConversations);
-      } else {
-        toast.error('Failed to delete conversation');
-      }
-    } catch (error) {
-      console.error('Failed to delete conversation:', error);
-      toast.error('Failed to delete conversation');
-    } finally {
-      setDeleteConfirm(null);
-    }
+    deleteConversationMutation.mutate(deleteConfirm.id, {
+      onSettled: () => {
+        setDeleteConfirm(null);
+      },
+    });
   };
 
   if (isLoading) {
@@ -249,11 +182,11 @@ export default function Home() {
             />
             <button
               onClick={createConversation}
-              disabled={!newTitle.trim() || isCreating}
+              disabled={!newTitle.trim() || createConversationMutation.isPending}
               className="px-3 sm:px-4 py-2 bg-blue-600 dark:bg-blue-500 text-white rounded-md hover:bg-blue-700 dark:hover:bg-blue-600 disabled:opacity-50 flex items-center justify-center space-x-2 text-sm sm:text-base"
             >
               <Plus className="w-4 h-4" />
-              <span>{isCreating ? 'Creating...' : 'Create'}</span>
+              <span>{createConversationMutation.isPending ? 'Creating...' : 'Create'}</span>
             </button>
           </div>
         </div>
@@ -299,71 +232,79 @@ export default function Home() {
                   .map(conversation => (
                     <div
                       key={conversation.id}
-                      className="p-4 sm:p-6 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-b border-gray-100 dark:border-gray-700 last:border-b-0"
+                      className="relative group"
                     >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between space-y-3 sm:space-y-0">
-                        <div className="flex-1 min-w-0">
-                          {editingId === conversation.id ? (
-                            <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 mb-2">
-                              <input
-                                type="text"
-                                value={editTitle}
-                                onChange={e => setEditTitle(e.target.value)}
-                                onKeyPress={e =>
-                                  e.key === 'Enter' && saveEditConversation()
-                                }
-                                className="flex-1 px-2 py-1 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 text-sm"
-                                autoFocus
-                              />
-                              <div className="flex space-x-2">
-                                <button
-                                  onClick={saveEditConversation}
-                                  className="px-3 py-1 bg-blue-500 dark:bg-blue-600 text-white rounded text-sm hover:bg-blue-600 dark:hover:bg-blue-700"
-                                >
-                                  Save
-                                </button>
-                                <button
-                                  onClick={() => setEditingId(null)}
-                                  className="px-3 py-1 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded text-sm hover:bg-gray-400 dark:hover:bg-gray-500"
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <Link
-                              href={`/c/${conversation.id}`}
-                              className="block"
-                            >
-                              <h3 className="text-base sm:text-lg font-medium text-gray-900 dark:text-white mb-1 hover:text-blue-600 dark:hover:text-blue-400 truncate">
-                                {conversation.title}
-                              </h3>
-                            </Link>
-                          )}
-                          <div className="flex flex-col sm:flex-row sm:items-center text-xs sm:text-sm text-gray-500 dark:text-gray-400 space-y-1 sm:space-y-0 sm:space-x-4">
-                            <div className="flex items-center">
-                              <MessageSquare className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
-                              {new Date(
-                                conversation.createdAt
-                              ).toLocaleDateString()}
-                            </div>
-                            <div className="flex items-center">
-                              <MessageSquare className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
-                              {(
-                                conversation as ConversationT & {
-                                  _count?: { nodes: number };
-                                }
-                              )._count?.nodes || 0}{' '}
-                              messages
+                      {editingId === conversation.id ? (
+                        <div className="p-4 sm:p-6 border-b border-gray-100 dark:border-gray-700 last:border-b-0">
+                          <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 mb-2">
+                            <input
+                              type="text"
+                              value={editTitle}
+                              onChange={e => setEditTitle(e.target.value)}
+                              onKeyPress={e =>
+                                e.key === 'Enter' && saveEditConversation()
+                              }
+                              className="flex-1 px-2 py-1 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 text-sm"
+                              autoFocus
+                            />
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={saveEditConversation}
+                                className="px-3 py-1 bg-blue-500 dark:bg-blue-600 text-white rounded text-sm hover:bg-blue-600 dark:hover:bg-blue-700"
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={() => setEditingId(null)}
+                                className="px-3 py-1 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded text-sm hover:bg-gray-400 dark:hover:bg-gray-500"
+                              >
+                                Cancel
+                              </button>
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center justify-end space-x-1 sm:space-x-2 flex-shrink-0">
+                      ) : (
+                        <Link
+                          href={`/c/${conversation.id}`}
+                          className="block p-4 sm:p-6 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-b border-gray-100 dark:border-gray-700 last:border-b-0"
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between space-y-3 sm:space-y-0">
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-base sm:text-lg font-medium text-gray-900 dark:text-white mb-1 hover:text-blue-600 dark:hover:text-blue-400 truncate">
+                                {conversation.title}
+                              </h3>
+                              <div className="flex flex-col sm:flex-row sm:items-center text-xs sm:text-sm text-gray-500 dark:text-gray-400 space-y-1 sm:space-y-0 sm:space-x-4">
+                                <div className="flex items-center">
+                                  <MessageSquare className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+                                  {new Date(
+                                    conversation.createdAt
+                                  ).toLocaleDateString()}
+                                </div>
+                                <div className="flex items-center">
+                                  <MessageSquare className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                                  {(
+                                    conversation as ConversationT & {
+                                      _count?: { nodes: number };
+                                    }
+                                  )._count?.nodes || 0}{' '}
+                                  messages
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </Link>
+                      )}
+                      
+                      {/* Action buttons positioned absolutely */}
+                      {editingId !== conversation.id && (
+                        <div className="absolute top-4 right-4 sm:top-6 sm:right-6 flex items-center space-x-1 sm:space-x-2 opacity-0 group-hover:opacity-100 transition-opacity bg-white dark:bg-gray-800 rounded-md shadow-sm">
                           <Tooltip content="Edit conversation">
                             <button
-                              onClick={() =>
-                                handleEditConversation(conversation)
-                              }
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleEditConversation(conversation);
+                              }}
                               className="p-1.5 sm:p-2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
                             >
                               <Edit2 className="w-3 h-3 sm:w-4 sm:h-4" />
@@ -371,35 +312,21 @@ export default function Home() {
                           </Tooltip>
                           <Tooltip content="Delete conversation">
                             <button
-                              onClick={() =>
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
                                 deleteConversation(
                                   conversation.id,
                                   conversation.title
-                                )
-                              }
+                                );
+                              }}
                               className="p-1.5 sm:p-2 text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
                             >
                               <Trash2 className="w-3 h-3 sm:w-4 sm:h-4" />
                             </button>
                           </Tooltip>
-                          <Link
-                            href={`/c/${conversation.id}`}
-                            className="p-1.5 sm:p-2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
-                          >
-                            <svg
-                              className="w-4 h-4 sm:w-5 sm:h-5"
-                              fill="currentColor"
-                              viewBox="0 0 20 20"
-                            >
-                              <path
-                                fillRule="evenodd"
-                                d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
-                                clipRule="evenodd"
-                              />
-                            </svg>
-                          </Link>
                         </div>
-                      </div>
+                      )}
                     </div>
                   ))}
               </div>
@@ -426,7 +353,7 @@ export default function Home() {
                         onClick={() =>
                           setCurrentPage(prev => Math.max(prev - 1, 1))
                         }
-                        disabled={currentPage === 1}
+                        disabled={currentPage === 1 || createConversationMutation.isPending}
                         className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700"
                       >
                         Previous
